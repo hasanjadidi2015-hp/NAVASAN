@@ -3,6 +3,8 @@ __pycache__/
 venv/
 env/
 .env
+*.db
 market_history.db
+ahram_v2.db
 market_forecast_dashboard.html
 .vscode/
