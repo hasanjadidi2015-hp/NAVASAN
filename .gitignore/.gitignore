@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+venv/
+env/
+.env
+market_history.db
+market_forecast_dashboard.html
+.vscode/

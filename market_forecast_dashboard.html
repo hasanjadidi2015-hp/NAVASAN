@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Navasanj | تصمیم آپشن</title>
+  <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" />
+  <style>
+    * { box-sizing:border-box; font-family:Vazirmatn,sans-serif; }
+    body { background:#0f172a; color:#f8fafc; margin:0; padding:20px; }
+    .header { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; border-bottom:1px solid #334155; padding-bottom:14px; }
+    .title { font-size:22px; font-weight:800; color:#38bdf8; }
+    .regime,.summary { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:12px 16px; margin:14px 0; display:flex; gap:14px; flex-wrap:wrap; }
+    .controls { display:flex; gap:10px; margin:12px 0 18px; flex-wrap:wrap; }
+    .search-box { padding:10px 14px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#fff; width:260px; }
+    .filter-btn { padding:8px 14px; border-radius:8px; border:none; background:#334155; color:#fff; cursor:pointer; }
+    .filter-btn.active,.filter-btn:hover { background:#0284c7; }
+    table { width:100%; border-collapse:collapse; background:#1e293b; border-radius:12px; overflow:hidden; font-size:12.5px; }
+    th,td { padding:10px 8px; text-align:right; border-bottom:1px solid #334155; white-space:nowrap; }
+    th { background:#0b1329; color:#94a3b8; position:sticky; top:0; }
+    tr:hover { background:#273549; }
+    .sym { color:#38bdf8; font-size:15px; }
+    .bold { font-weight:700; }
+    .text-muted { color:#94a3b8; font-size:11px; }
+    .text-green { color:#4ade80; font-weight:700; }
+    .text-red { color:#f87171; font-weight:700; }
+    .badge,.opt-badge { padding:6px 10px; border-radius:16px; font-size:12px; font-weight:800; display:inline-block; }
+    .opt-call-strong { background:rgba(34,197,94,.25); color:#4ade80; border:1px solid #22c55e; }
+    .opt-call-soft { background:rgba(56,189,248,.2); color:#38bdf8; border:1px solid #0ea5e9; }
+    .opt-put-strong { background:rgba(239,68,68,.25); color:#f87171; border:1px solid #ef4444; }
+    .opt-put-soft { background:rgba(249,115,22,.2); color:#fb923c; border:1px solid #f97316; }
+    .opt-no { background:rgba(148,163,184,.15); color:#cbd5e1; border:1px solid #64748b; }
+    .status-buy-queue { background:rgba(34,197,94,.2); color:#4ade80; border:1px solid #22c55e; }
+    .status-positive { background:rgba(56,189,248,.2); color:#38bdf8; }
+    .status-neutral { background:rgba(148,163,184,.2); color:#cbd5e1; }
+    .status-negative { background:rgba(249,115,22,.2); color:#fb923c; }
+    .status-sell-queue { background:rgba(239,68,68,.2); color:#f87171; border:1px solid #ef4444; }
+    .pressure-wrap { position:relative; width:70px; height:18px; background:#334155; border-radius:9px; overflow:hidden; display:inline-block; }
+    .pressure-bar { position:absolute; right:0; top:0; bottom:0; background:#22c55e; }
+    .pressure-wrap span { position:relative; z-index:1; font-size:11px; font-weight:800; display:flex; height:100%; align-items:center; justify-content:center; color:#fff; }
+    .note { margin-top:12px; color:#94a3b8; font-size:12px; line-height:1.9; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">🎯 Navasanj — تصمیم آپشن فردا</div>
+    <div style="color:#94a3b8">نماد فعال: <strong style="color:#38bdf8">23</strong></div>
+  </div>
+
+  <div class="regime">
+    <div>رژیم: <b>بازار منفی / ریسک‌گریز 🔴</b></div>
+    <div>شاخص: <b>+0.00%</b></div>
+    <div>هم‌وزن: <b>+0.00%</b></div>
+    <div>ضریب: <b>×0.75</b></div>
+  </div>
+
+  <div class="summary">
+    <div>CALL قوی: <b style="color:#4ade80">1</b></div>
+    <div>CALL محتاط: <b style="color:#38bdf8">0</b></div>
+    <div>NO TRADE: <b>6</b></div>
+    <div>PUT محتاط: <b style="color:#fb923c">0</b></div>
+    <div>PUT قوی: <b style="color:#f87171">16</b></div>
+  </div>
+
+  <div class="controls">
+    <input id="searchInput" class="search-box" placeholder="🔍 جستجوی نماد..." onkeyup="filterTable()" />
+    <button class="filter-btn active" onclick="setOpt('all')">همه</button>
+    <button class="filter-btn" onclick="setOpt('opt-call-strong')">CALL آماده‌باش</button>
+    <button class="filter-btn" onclick="setOpt('opt-call-soft')">CALL محتاط</button>
+    <button class="filter-btn" onclick="setOpt('opt-no')">NO TRADE</button>
+    <button class="filter-btn" onclick="setOpt('opt-put-soft')">PUT محتاط</button>
+    <button class="filter-btn" onclick="setOpt('opt-put-strong')">PUT آماده‌باش</button>
+  </div>
+
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th>نماد</th>
+        <th>🎯 تصمیم آپشن</th>
+        <th>آخرین</th>
+        <th>قدرت خریدار</th>
+        <th>سرانه</th>
+        <th>فشار</th>
+        <th>Alpha</th>
+        <th>پایانی بازار</th>
+        <th>کندل</th>
+        <th>صف</th>
+        <th>پیش‌بینی عمومی</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+        <tr class="stock-row" data-status="status-buy-queue" data-option="opt-call-strong">
+            <td class="bold sym">ذوب</td>
+            <td><span class="opt-badge opt-call-strong">CALL آماده‌باش 🟢🟢</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت صعودی</div>
+            </td>
+            <td>609 <span class="text-green">(2.87%)</span></td>
+            <td class="bold text-green">2.64</td>
+            <td>246.84 م / 93.55 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:88%"></div><span>88</span></div>
+            </td>
+            <td class="bold text-green">+2.03%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⬆️ کندل صعودی</div>
+              <div class="text-muted">CLV:+0.41</div>
+            </td>
+            <td><span class='text-green'>خرید 2,172,193,615</span></td>
+            <td><span class="badge status-buy-queue">صف خرید محتمل / بسیار پرتقاضا 🟢🟢</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">وتجارت</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>982 <span class="text-red">(-2.87%)</span></td>
+            <td class="bold text-red">0.55</td>
+            <td>216.96 م / 394.03 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:22%"></div><span>22</span></div>
+            </td>
+            <td class="bold text-red">-2.87%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.88</div>
+            </td>
+            <td><span class='text-red'>فروش 1,015,542</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">موج</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>68,726 <span class="text-red">(-4.0%)</span></td>
+            <td class="bold text-red">0.62</td>
+            <td>237.82 م / 382.09 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:19%"></div><span>19</span></div>
+            </td>
+            <td class="bold text-red">-3.95%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.82</div>
+            </td>
+            <td><span class='text-red'>فروش 60,000</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">خودرو</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>695 <span class="text-red">(-2.39%)</span></td>
+            <td class="bold text-red">0.64</td>
+            <td>94.07 م / 146.32 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:13%"></div><span>13</span></div>
+            </td>
+            <td class="bold text-red">-2.53%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.70</div>
+            </td>
+            <td>1,527,671 / 30,190</td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">شپنا</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>12,610 <span class="text-red">(-2.25%)</span></td>
+            <td class="bold text-red">0.43</td>
+            <td>73.68 م / 172.68 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:13%"></div><span>13</span></div>
+            </td>
+            <td class="bold text-red">-2.56%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.71</div>
+            </td>
+            <td>71,573 / 505</td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">خبهمن</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>2,626 <span class="text-red">(-2.99%)</span></td>
+            <td class="bold text-red">0.13</td>
+            <td>42.36 م / 318.95 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.99%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⚪ دوجی / بی‌تصمیمی</div>
+              <div class="text-muted">CLV:+0.00</div>
+            </td>
+            <td><span class='text-red'>فروش 242,398,225</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">وبملت</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>1,519 <span class="text-red">(-2.94%)</span></td>
+            <td class="bold text-red">0.05</td>
+            <td>25.74 م / 480.1 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.94%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⚪ دوجی / بی‌تصمیمی</div>
+              <div class="text-muted">CLV:+0.00</div>
+            </td>
+            <td><span class='text-red'>فروش 6,373,703,732</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">اهرم</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>55,506 <span class="text-red">(-4.0%)</span></td>
+            <td class="bold text-red">0.58</td>
+            <td>229.08 م / 396.15 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-3.93%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.79</div>
+            </td>
+            <td><span class='text-red'>فروش 203,829</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">دارونو</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>33,961 <span class="text-red">(-2.98%)</span></td>
+            <td class="bold text-red">0.5</td>
+            <td>43.0 م / 86.74 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.96%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.88</div>
+            </td>
+            <td><span class='text-red'>فروش 5,000</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">جوانه کوچک</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>28,555 <span class="text-red">(-1.71%)</span></td>
+            <td class="bold text-red">0.32</td>
+            <td>32.06 م / 99.89 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.49%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.55</div>
+            </td>
+            <td>178 / 18,275</td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">توان</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>55,960 <span class="text-red">(-4.0%)</span></td>
+            <td class="bold text-red">0.3</td>
+            <td>56.5 م / 188.96 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-4.00%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.95</div>
+            </td>
+            <td><span class='text-red'>فروش 9,741,468</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">وبصادر</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>1,023 <span class="text-red">(-2.94%)</span></td>
+            <td class="bold text-red">0.65</td>
+            <td>189.53 م / 293.54 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.94%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-1.00</div>
+            </td>
+            <td><span class='text-red'>فروش 677,387,072</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">بساما</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>11,580 <span class="text-red">(-2.93%)</span></td>
+            <td class="bold text-red">0.32</td>
+            <td>17.18 م / 53.1 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-1.93%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⬆️ کندل صعودی</div>
+              <div class="text-muted">CLV:-0.20</div>
+            </td>
+            <td><span class='text-red'>فروش 574,582</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">شستا</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>2,880 <span class="text-red">(-2.93%)</span></td>
+            <td class="bold text-red">0.38</td>
+            <td>51.81 م / 134.96 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.76%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.81</div>
+            </td>
+            <td><span class='text-red'>فروش 1,223,716</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">اخابر</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>998 <span class="text-red">(-2.92%)</span></td>
+            <td class="bold text-red">0.05</td>
+            <td>20.48 م / 431.72 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.92%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⚪ دوجی / بی‌تصمیمی</div>
+              <div class="text-muted">CLV:+0.00</div>
+            </td>
+            <td><span class='text-red'>فروش 934,555,805</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">اطلس</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>142,897 <span class="text-red">(-2.92%)</span></td>
+            <td class="bold text-red">0.26</td>
+            <td>45.61 م / 173.54 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.83%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.77</div>
+            </td>
+            <td><span class='text-red'>فروش 31</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-sell-queue" data-option="opt-put-strong">
+            <td class="bold sym">طعام</td>
+            <td><span class="opt-badge opt-put-strong">PUT آماده‌باش 🔴🔴</span>
+                <div class="text-muted">فشار+قدرت هم‌جهت نزولی</div>
+            </td>
+            <td>28,227 <span class="text-red">(-3.0%)</span></td>
+            <td class="bold text-red">0.19</td>
+            <td>5.36 م / 27.5 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:12%"></div><span>12</span></div>
+            </td>
+            <td class="bold text-red">-2.89%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.94</div>
+            </td>
+            <td><span class='text-red'>فروش 388,400</span></td>
+            <td><span class="badge status-sell-queue">صف فروش محتمل / پرعرضه 🔴🔴</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-positive" data-option="opt-no">
+            <td class="bold sym">خساپا</td>
+            <td><span class="opt-badge opt-no">NO TRADE ⚪</span>
+                <div class="text-muted">سیگنال قاطی/ضعیف برای آپشن</div>
+            </td>
+            <td>719 <span class="text-green">(2.71%)</span></td>
+            <td class="bold ">0.97</td>
+            <td>170.7 م / 175.64 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:69%"></div><span>69</span></div>
+            </td>
+            <td class="bold ">-0.14%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⬆️ کندل صعودی</div>
+              <div class="text-muted">CLV:-0.05</div>
+            </td>
+            <td>9,049,110 / 3,000,000</td>
+            <td><span class="badge status-positive">مثبت و صعودی 🟢</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-positive" data-option="opt-no">
+            <td class="bold sym">فزر</td>
+            <td><span class="opt-badge opt-no">NO TRADE ⚪</span>
+                <div class="text-muted">تله گاوی / صف بی‌کیفیت</div>
+            </td>
+            <td>246,200 <span class="text-green">(2.97%)</span></td>
+            <td class="bold text-red">0.65</td>
+            <td>96.71 م / 149.09 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:61%"></div><span>61</span></div>
+            </td>
+            <td class="bold text-green">+2.76%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>🔨 چکش / رد کف ⚠️ تله گاوی</div>
+              <div class="text-muted">CLV:+0.86</div>
+            </td>
+            <td><span class='text-green'>خرید 6,727,542</span></td>
+            <td><span class="badge status-positive">مثبت و صعودی 🟢</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-positive" data-option="opt-no">
+            <td class="bold sym">تاصیکو</td>
+            <td><span class="opt-badge opt-no">NO TRADE ⚪</span>
+                <div class="text-muted">تله گاوی / صف بی‌کیفیت</div>
+            </td>
+            <td>24,000 <span class="text-green">(2.96%)</span></td>
+            <td class="bold text-red">0.74</td>
+            <td>84.42 م / 114.41 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:61%"></div><span>61</span></div>
+            </td>
+            <td class="bold text-green">+1.20%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⬆️ کندل صعودی ⚠️ تله گاوی</div>
+              <div class="text-muted">CLV:+0.41</div>
+            </td>
+            <td><span class='text-green'>خرید 16,424,373</span></td>
+            <td><span class="badge status-positive">مثبت و صعودی 🟢</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-positive" data-option="opt-no">
+            <td class="bold sym">فملی</td>
+            <td><span class="opt-badge opt-no">NO TRADE ⚪</span>
+                <div class="text-muted">تله گاوی / صف بی‌کیفیت</div>
+            </td>
+            <td>22,160 <span class="text-green">(2.97%)</span></td>
+            <td class="bold text-red">0.77</td>
+            <td>85.62 م / 111.79 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:61%"></div><span>61</span></div>
+            </td>
+            <td class="bold text-green">+1.67%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⬆️ کندل صعودی ⚠️ تله گاوی</div>
+              <div class="text-muted">CLV:+0.56</div>
+            </td>
+            <td><span class='text-green'>خرید 65,244,762</span></td>
+            <td><span class="badge status-positive">مثبت و صعودی 🟢</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-neutral" data-option="opt-no">
+            <td class="bold sym">طلا</td>
+            <td><span class="opt-badge opt-no">NO TRADE ⚪</span>
+                <div class="text-muted">سیگنال قاطی/ضعیف برای آپشن</div>
+            </td>
+            <td>1,600,000 <span class="text-green">(1.42%)</span></td>
+            <td class="bold text-red">0.69</td>
+            <td>252.79 م / 367.48 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:54%"></div><span>54</span></div>
+            </td>
+            <td class="bold text-green">+1.27%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⚪ دوجی / بی‌تصمیمی</div>
+              <div class="text-muted">CLV:-0.16</div>
+            </td>
+            <td>7,610 / 4,998</td>
+            <td><span class="badge status-neutral">متعادل / رنج ⚪</span></td>
+        </tr>
+        
+        <tr class="stock-row" data-status="status-negative" data-option="opt-no">
+            <td class="bold sym">کهربا</td>
+            <td><span class="opt-badge opt-no">NO TRADE ⚪</span>
+                <div class="text-muted">سیگنال قاطی/ضعیف برای آپشن</div>
+            </td>
+            <td>216,349 <span class="text-green">(1.29%)</span></td>
+            <td class="bold text-red">0.64</td>
+            <td>177.94 م / 280.16 م</td>
+            <td>
+              <div class="pressure-wrap"><div class="pressure-bar" style="width:40%"></div><span>40</span></div>
+            </td>
+            <td class="bold text-green">+1.10%</td>
+            <td>
+              <div>➡️ ثابت / خنثی</div>
+              <div class="text-muted">EG:50</div>
+            </td>
+            <td>
+              <div>⭐ شوتینگ‌استار / رد سقف</div>
+              <div class="text-muted">CLV:-0.23</div>
+            </td>
+            <td>212 / 14,599</td>
+            <td><span class="badge status-negative">منفی و نزولی 🔴</span></td>
+        </tr>
+        </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>چطور استفاده کنی؟</b><br/>
+    1) اول فیلتر <b>CALL آماده‌باش</b> یا <b>PUT آماده‌باش</b> را بزن<br/>
+    2) اگر خالی بود، <b>محتاط</b> را ببین<br/>
+    3) <b>NO TRADE</b> یعنی برای آپشن جهت‌دار مناسب نیست<br/>
+    4) این توصیه است نه سیگنال تضمینی. مدیریت سرمایه و حد ضرر فراموش نشود.
+  </div>
+
+  <script>
+    let currentOpt = 'all';
+    function setOpt(v){
+      currentOpt = v;
+      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+      event.target.classList.add('active');
+      filterTable();
+    }
+    function filterTable(){
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      document.querySelectorAll('.stock-row').forEach(row=>{
+        const okSearch = row.innerText.toLowerCase().includes(search);
+        const opt = row.getAttribute('data-option');
+        const okOpt = currentOpt === 'all' || opt === currentOpt;
+        row.style.display = (okSearch && okOpt) ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>
