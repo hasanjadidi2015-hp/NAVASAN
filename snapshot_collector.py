@@ -23,6 +23,66 @@ import time
 from collector import fetch_enriched_target_data, normalize_fa
 
 DB_NAME = "market_history.db"
+LOG_FILE = "snapshot_log.txt"
+
+
+def log_event(status: str, detail: str = ""):
+    """
+    ثبت وضعیت هر تلاش برای گرفتن اسنپ‌شات - چه موفق چه ناموفق.
+    هم در یک فایل متنی ساده و هم در جدول snapshot_log ذخیره می‌شود تا
+    بعداً در بک‌تست بشود فهمید کدام روز/بازه‌ها داده‌ی ناقص داشته‌اند.
+    """
+    now = datetime.datetime.now()
+    line = f"{now.strftime('%Y-%m-%d %H:%M:%S')} | {status} | {detail}"
+    print(f"📝 {line}")
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS snapshot_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT,
+                time TEXT,
+                status TEXT,
+                detail TEXT
+            )
+            """
+        )
+        cur.execute(
+            "INSERT INTO snapshot_log (date, time, status, detail) VALUES (?, ?, ?, ?)",
+            (now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), status, detail),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def print_log_summary():
+    """خلاصه‌ی تعداد موفق/ناموفق هر روز - برای اجرا با: python snapshot_collector.py report"""
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='snapshot_log'")
+    if not cur.fetchone():
+        print("هنوز هیچ لاگی ثبت نشده.")
+        conn.close()
+        return
+    cur.execute(
+        "SELECT date, status, COUNT(*) FROM snapshot_log GROUP BY date, status ORDER BY date"
+    )
+    rows = cur.fetchall()
+    conn.close()
+    print("\n📋 خلاصه‌ی لاگ اسنپ‌شات‌ها بر اساس روز:")
+    for d, status, cnt in rows:
+        mark = "✅" if status == "OK" else ("⚠️" if status == "FAILED" else "🔥" if status == "CRASH" else "ℹ️")
+        print(f"  {mark} {d} | {status:8s} | {cnt} بار")
+    print("\nنکته: اگه روزی FAILED یا CRASH داره، به Endgame Score اون روز اعتماد نکن.")
 
 
 def _f(val, default=0.0) -> float:
@@ -174,13 +234,24 @@ def save_snapshot(rows: list):
 
 
 def run_once():
-    raw, _regime = fetch_enriched_target_data(max_workers=6)
-    if not raw:
-        print("❌ دیتا نیامد.")
+    try:
+        raw, _regime = fetch_enriched_target_data(max_workers=6)
+    except Exception as e:
+        log_event("FAILED", f"خطا در دریافت داده (احتمال قطعی برق/اینترنت): {e}")
         return
+
+    if not raw:
+        log_event("FAILED", "دیتا خالی برگشت (raw خالی) - احتمال قطعی برق/اینترنت یا خرابی سرور")
+        return
+
     rows = [extract_snapshot_row(item) for item in raw]
     rows = [r for r in rows if r]
+    if not rows:
+        log_event("FAILED", "هیچ ردیف معتبری بعد از پردازش استخراج نشد")
+        return
+
     save_snapshot(rows)
+    log_event("OK", f"{len(rows)} نماد ذخیره شد")
 
 
 def run_loop(interval_minutes: int = 20, start: str = "08:55", end: str = "12:30"):
@@ -189,17 +260,29 @@ def run_loop(interval_minutes: int = 20, start: str = "08:55", end: str = "12:30
     این اسکریپت باید صبح قبل از باز شدن بازار اجرا شود و تا پایان بازار روشن بماند.
     """
     print(f"🚀 جمع‌آوری اسنپ‌شات هر {interval_minutes} دقیقه، بین ساعت {start} تا {end}")
+    log_event("START", f"شروع جمع‌آوری - بازه {start} تا {end}")
     while True:
         now = datetime.datetime.now().strftime("%H:%M")
         if now < start:
             time.sleep(15)
             continue
         if now > end:
+            log_event("END", "ساعت پایان رسید - جمع‌آوری متوقف شد")
             print("⏹ ساعت پایان رسید، جمع‌آوری متوقف شد.")
             break
-        run_once()
+        try:
+            run_once()
+        except Exception as e:
+            # حتی اگه run_once به هر دلیل غیرمنتظره‌ای کرش کنه (مثلاً قطع شدن
+            # ناگهانی اتصال وسط پردازش)، حلقه نباید کلاً متوقف بشه.
+            log_event("CRASH", f"خطای غیرمنتظره در run_once: {e}")
         time.sleep(interval_minutes * 60)
 
 
 if __name__ == "__main__":
-    run_loop()
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "report":
+        print_log_summary()
+    else:
+        run_loop()
