@@ -8,6 +8,11 @@ from collector import TARGET_SYMBOLS, fetch_enriched_target_data, normalize_fa
 
 DB_NAME = "market_history.db"
 
+# آستانه‌های فیلتر «رشد بی‌پشتوانه»: وقتی قدرت خریدار حقیقی خیلی پایینه
+# ولی نماد صف خرید هم نخورده (پس فیلتر تله‌گاوی موجود این حالت را نمی‌گیرد)
+UNSUPPORTED_RALLY_POWER_THRESHOLD = 0.70
+UNSUPPORTED_RALLY_SCORE_CAP = 60
+
 
 def _f(val, default=0.0) -> float:
     try:
@@ -742,6 +747,19 @@ def analyze_tomorrow_status(item: dict, regime_info: dict, endgame_map: dict) ->
             round(max(0.0, min(100.0, 50.0 + (pressure_raw - 50.0) * mult)))
         )
 
+        # فیلتر جدید: «رشد بی‌پشتوانه» - قدرت خریدار حقیقی خیلی پایینه ولی
+        # چون صف خرید نخورده، فیلتر تله‌گاوی بالا این حالت رو نمی‌گیره.
+        # اضافه شد بعد از بررسی سیگنال باخته‌ی خساپا در 2026-09-08
+        # (تأیید شده با simulate_new_filter.py روی داده‌ی تاریخی - فقط این
+        # نوع سیگنال رو حذف کرد، هیچ سیگنال برنده‌ای آسیب ندید).
+        is_unsupported_rally = (
+            buyer_power < UNSUPPORTED_RALLY_POWER_THRESHOLD and not is_buy_queue
+        )
+        if is_unsupported_rally:
+            candle["candle_label"] += " ⚠️ رشد بی‌پشتوانه"
+            if pressure_score > UNSUPPORTED_RALLY_SCORE_CAP:
+                pressure_score = UNSUPPORTED_RALLY_SCORE_CAP
+
         if pressure_score >= 80 or (is_buy_queue and pressure_score >= 68 and not is_bull_trap):
             prediction, status_class = "صف خرید محتمل / بسیار پرتقاضا 🟢🟢", "status-buy-queue"
         elif pressure_score >= 60:
@@ -794,6 +812,7 @@ def analyze_tomorrow_status(item: dict, regime_info: dict, endgame_map: dict) ->
             "status_class": status_class,
             "is_buy_queue": is_buy_queue,
             "is_sell_queue": is_sell_queue,
+            "is_unsupported_rally": is_unsupported_rally,
             "has_real_data": total_real > 0 or buy_count_i > 0,
             "has_queue_data": (buy_q_vol > 0 or sell_q_vol > 0),
         }
