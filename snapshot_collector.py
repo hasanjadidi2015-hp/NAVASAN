@@ -77,12 +77,39 @@ def print_log_summary():
         "SELECT date, status, COUNT(*) FROM snapshot_log GROUP BY date, status ORDER BY date"
     )
     rows = cur.fetchall()
-    conn.close()
     print("\n📋 خلاصه‌ی لاگ اسنپ‌شات‌ها بر اساس روز:")
     for d, status, cnt in rows:
         mark = "✅" if status == "OK" else ("⚠️" if status == "FAILED" else "🔥" if status == "CRASH" else "ℹ️")
         print(f"  {mark} {d} | {status:8s} | {cnt} بار")
-    print("\nنکته: اگه روزی FAILED یا CRASH داره، به Endgame Score اون روز اعتماد نکن.")
+
+    # تشخیص شکاف زمانی: اگه بین دو تلاش پیاپی (هر نوعی) بیش از ۲ برابر
+    # فاصله‌ی معمول (پیش‌فرض ۲۰ دقیقه) گذشته باشه، یعنی احتمالاً کل
+    # پردازش (نه فقط یک تلاش) از کار افتاده - مثل قطعی کامل برق.
+    print("\n🕳️  بررسی شکاف‌های زمانی (قطعی کامل که چیزی لاگ نشده):")
+    cur.execute("SELECT date, time FROM snapshot_log ORDER BY date ASC, time ASC")
+    all_rows = cur.fetchall()
+    conn.close()
+
+    import datetime as _dt
+
+    found_gap = False
+    prev_dt = None
+    for d, t in all_rows:
+        cur_dt = _dt.datetime.strptime(f"{d} {t}", "%Y-%m-%d %H:%M:%S")
+        if prev_dt is not None and prev_dt.date() == cur_dt.date():
+            gap_minutes = (cur_dt - prev_dt).total_seconds() / 60
+            if gap_minutes > 40:  # بیش از ۲ برابر فاصله‌ی پیش‌فرض ۲۰ دقیقه
+                print(
+                    f"  ⚠️ {cur_dt.date()} : شکاف {gap_minutes:.0f} دقیقه‌ای بین "
+                    f"{prev_dt.strftime('%H:%M:%S')} و {cur_dt.strftime('%H:%M:%S')} "
+                    f"- احتمال قطعی کامل (برق/سیستم)"
+                )
+                found_gap = True
+        prev_dt = cur_dt
+    if not found_gap:
+        print("  شکاف مشکوکی پیدا نشد.")
+
+    print("\nنکته: اگه روزی FAILED/CRASH یا شکاف زمانی داره، به Endgame Score اون روز اعتماد نکن.")
 
 
 def _f(val, default=0.0) -> float:
