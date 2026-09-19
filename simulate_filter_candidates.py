@@ -27,7 +27,7 @@ def fetch_signals(cur):
         cur.execute(
             f"""
             SELECT t.symbol, t.date, t.pressure_score, t.buyer_power, t.is_buy_queue,
-                   t.alpha_market, t.alpha_industry, t.vol_vs_avg,
+                   t.alpha_market, t.alpha_industry, t.vol_vs_avg, t.endgame_score,
                    t1.close_change_pct AS actual
             FROM daily_predictions t
             JOIN daily_predictions t1 ON t.symbol = t1.symbol AND t1.date = ?
@@ -131,6 +131,44 @@ def run():
             and r["buyer_power"] < 0.75
             and (r["vol_vs_avg"] or 0) < 1.0
             and not r["is_buy_queue"]
+        ),
+    )
+
+    # فرضیه‌ی جدید: صف خرید واقعی ولی با قدرت خریدار نسبتاً ضعیف
+    # (بر اساس باخت وبملت 2026-09-13: صف خورد ولی Power=1.08، خیلی
+    # پایین‌تر از بقیه‌ی صف‌خریدی‌های همون روز که همه بالای 3.5 بودن)
+    for th in (1.3, 1.5, 2.0):
+        eval_rule(
+            rows,
+            f"صف ضعیف: is_buy_queue=True و buyer_power < {th}",
+            lambda r, th=th: (
+                bool(r["is_buy_queue"])
+                and r["buyer_power"] is not None
+                and r["buyer_power"] < th
+            ),
+        )
+
+    # فرضیه‌ی جدید: صف خرید ولی endgame ضعیف/خنثی (زیر ۶۵)
+    eval_rule(
+        rows,
+        "صف ضعیف: is_buy_queue=True و endgame_score < 65",
+        lambda r: (
+            bool(r["is_buy_queue"])
+            and r["endgame_score"] is not None
+            and r["endgame_score"] < 65
+        ),
+    )
+
+    # فرضیه‌ی ترکیبی: صف خرید + هم قدرت پایین‌تر از حد انتظار + هم endgame ضعیف
+    eval_rule(
+        rows,
+        "صف ضعیف ترکیبی: is_buy_queue=True و buyer_power < 1.5 و endgame_score < 65",
+        lambda r: (
+            bool(r["is_buy_queue"])
+            and r["buyer_power"] is not None
+            and r["buyer_power"] < 1.5
+            and r["endgame_score"] is not None
+            and r["endgame_score"] < 65
         ),
     )
 
