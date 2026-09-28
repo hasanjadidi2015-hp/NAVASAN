@@ -14,6 +14,20 @@ DB_NAME = "market_history.db"
 # 2026-09-13) - هر دو باخت ثبت‌شده تا این تاریخ (خساپا 09-08 و 09-12) را
 # حذف می‌کند بدون آسیب به هیچ سیگنال برنده‌ای (نتیجه: n=30, Win=100%, Avg=+2.81%)
 UNSUPPORTED_RALLY_POWER_THRESHOLD = 0.75
+
+# فیلتر «رژیم منفی»: تست‌شده روی 47 سیگنال (2026-09-27) - در روزهای رژیم
+# bear، سیگنال‌های زیر این آستانه رو دیگه معتبر نمی‌دونیم (نسبت ۴ باخت درست
+# حذف‌شده به فقط ۱ برنده‌ی از دست‌رفته؛ نتیجه: Win از 80.9% به 88.1%)
+BEAR_REGIME_MIN_PRESSURE = 80
+
+# فیلتر «سکتور داغ مشکوک»: وقتی کل صنعت خیلی داغه (alpha_industry بالا)
+# ولی خود نماد قدرت خریدار فوق‌العاده‌ای نداره، یعنی رشد بیشتر موج صنعتیه
+# تا تقاضای واقعی روی خود نماد - تست‌شده روی 47 سیگنال (2026-09-27)، هر دو
+# نمونه‌ی معمای "صف قوی که شکست می‌خوره" (وبملت 09-13, شپنا 09-23) رو گرفت
+# (نتیجه: n=36, Win=91.7%, Avg=+2.51%؛ هزینه: 5 سیگنال برنده هم حذف شدن)
+HOT_SECTOR_ALPHA_INDUSTRY_THRESHOLD = 4.0
+HOT_SECTOR_BUYER_POWER_THRESHOLD = 1.5
+HOT_SECTOR_SCORE_CAP = 60
 UNSUPPORTED_RALLY_SCORE_CAP = 60
 
 
@@ -763,6 +777,25 @@ def analyze_tomorrow_status(item: dict, regime_info: dict, endgame_map: dict) ->
             if pressure_score > UNSUPPORTED_RALLY_SCORE_CAP:
                 pressure_score = UNSUPPORTED_RALLY_SCORE_CAP
 
+        # فیلتر «رژیم منفی»: در روزهای بازار منفی، فقط به سیگنال‌های خیلی
+        # قوی (فشار >= 80) اعتماد کن؛ بقیه رو زیر آستانه‌ی سیگنال نگه دار.
+        current_regime = regime_info.get("regime", "neutral")
+        if current_regime == "bear" and pressure_score < BEAR_REGIME_MIN_PRESSURE:
+            candle["candle_label"] += " ⚠️ رژیم منفی"
+            if pressure_score >= 65:
+                pressure_score = 64
+
+        # فیلتر «سکتور داغ مشکوک»: کل صنعت خیلی داغه ولی خود نماد قدرت
+        # خریدار فوق‌العاده‌ای نداره - یعنی این رشد بیشتر موج صنعتیه.
+        is_hot_sector_suspect = (
+            alpha_industry > HOT_SECTOR_ALPHA_INDUSTRY_THRESHOLD
+            and buyer_power < HOT_SECTOR_BUYER_POWER_THRESHOLD
+        )
+        if is_hot_sector_suspect:
+            candle["candle_label"] += " ⚠️ سکتور داغ مشکوک"
+            if pressure_score > HOT_SECTOR_SCORE_CAP:
+                pressure_score = HOT_SECTOR_SCORE_CAP
+
         if pressure_score >= 80 or (is_buy_queue and pressure_score >= 68 and not is_bull_trap):
             prediction, status_class = "صف خرید محتمل / بسیار پرتقاضا 🟢🟢", "status-buy-queue"
         elif pressure_score >= 60:
@@ -816,6 +849,7 @@ def analyze_tomorrow_status(item: dict, regime_info: dict, endgame_map: dict) ->
             "is_buy_queue": is_buy_queue,
             "is_sell_queue": is_sell_queue,
             "is_unsupported_rally": is_unsupported_rally,
+            "is_hot_sector_suspect": is_hot_sector_suspect,
             "has_real_data": total_real > 0 or buy_count_i > 0,
             "has_queue_data": (buy_q_vol > 0 or sell_q_vol > 0),
         }

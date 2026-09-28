@@ -28,7 +28,7 @@ def fetch_signals(cur):
             f"""
             SELECT t.symbol, t.date, t.pressure_score, t.buyer_power, t.is_buy_queue,
                    t.alpha_market, t.alpha_industry, t.vol_vs_avg, t.endgame_score,
-                   t1.close_change_pct AS actual
+                   t.regime, t1.close_change_pct AS actual
             FROM daily_predictions t
             JOIN daily_predictions t1 ON t.symbol = t1.symbol AND t1.date = ?
             WHERE t.date = ? AND t.symbol IN ({placeholders})
@@ -169,6 +169,27 @@ def run():
             and r["buyer_power"] < 1.5
             and r["endgame_score"] is not None
             and r["endgame_score"] < 65
+        ),
+    )
+
+    # فرضیه‌ی جدید: رژیم بازار منفی - نیاز به آستانه‌ی بالاتر (۸۰ به‌جای ۶۵)
+    # (بر اساس regime_breakdown.py: bear Win=73.9% در مقابل neutral Win=87.5%)
+    eval_rule(
+        rows,
+        "رژیم منفی: regime='bear' و pressure_score < 80 (رد کن)",
+        lambda r: (r["regime"] == "bear" and (r["pressure_score"] or 0) < 80),
+    )
+
+    # فرضیه‌ی جدید: سکتور داغ ولی خریدار نسبتاً ضعیف
+    # (بر اساس باخت‌های 2026-09-23: اهرم و شپنا هردو alpha_industry خیلی
+    # بالا داشتن (+5.09%, +5.75%) ولی buyer_power فقط متوسط (0.84, 1.47))
+    eval_rule(
+        rows,
+        "سکتور داغ مشکوک: alpha_industry > 4.0 و buyer_power < 1.5",
+        lambda r: (
+            (r["alpha_industry"] or 0) > 4.0
+            and r["buyer_power"] is not None
+            and r["buyer_power"] < 1.5
         ),
     )
 
