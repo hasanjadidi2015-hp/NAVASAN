@@ -230,3 +230,16 @@
 2026-09-30 11:58:55 | OK | 23 نماد ذخیره شد
 2026-09-30 12:18:56 | OK | 23 نماد ذخیره شد
 2026-10-01 01:15:19 | START | شروع جمع‌آوری - بازه 08:55 تا 12:30
+2026-10-03 08:56:29 | START | شروع جمع‌آوری - بازه 08:55 تا 12:30
+2026-10-03 08:56:30 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 09:16:33 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 09:36:35 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 09:56:36 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 10:16:38 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 10:36:39 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 10:56:41 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 11:16:42 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 11:36:43 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 11:56:44 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 12:16:47 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-03 12:36:47 | END | ساعت پایان رسید - جمع‌آوری متوقف شد

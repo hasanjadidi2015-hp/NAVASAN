@@ -68,17 +68,16 @@ def jalali_to_gregorian(jy: int, jm: int, jd: int) -> tuple[int, int, int]:
 
 
 def get_days_to_expiration(lvc_text: str) -> int:
-  """استخراج تاریخ شمسی سررسید از اسم قرارداد و محاسبه روزهای باقیمانده (پشتیبانی از تک‌رقمی‌ها)."""
+  """استخراج تاریخ شمسی سررسید از اسم قرارداد و محاسبه روزهای باقیمانده."""
   if not lvc_text:
-    return 0
+    return 30
 
-  # الگوی هوشمند برای خواندن فرمت‌های 1403/7/8 یا 1403/07/08
   match = re.search(
       r"(1[34]\d{2})[/\.-](0?[1-9]|1[0-2])[/\.-](0?[1-9]|[12]\d|3[01])",
       lvc_text,
   )
   if not match:
-    return 0  # اگر تاریخ پیدا نشد صفر برمی‌گرداند تا حذف شود
+    return 30  # مهلت تخمینی پیش‌فرض در صورت عدم وجود تاریخ شفاف
 
   try:
     jy = int(match.group(1))
@@ -91,10 +90,10 @@ def get_days_to_expiration(lvc_text: str) -> int:
     dte = (expire_date - today).days
     return dte
   except Exception:
-    return 0
+    return 30
 
 
-# 🎯 جدول نهایی نگاشت پیشوندهای دقیق اختیار معامله
+# 🎯 جدول نهایی نگاشت پیشوندهای دقیق اختیار معامله (با افزودن نام شرکت‌ها)
 OPTION_PREFIX_MAP = {
     "اهرم": ("ضهرم", "طهرم", ["اهرم", "هرم"]),
     "فملی": ("ضملی", "طملی", ["فملی", "فملي", "ملی", "ملي"]),
@@ -108,7 +107,7 @@ OPTION_PREFIX_MAP = {
     "تاصیکو": ("ضتاس", "طتاس", ["تاصیکو", "تاصيكو", "صیکو", "تاس"]),
     "وبصادر": ("ضصاد", "طصاد", ["وبصادر", "صادر", "صاد"]),
     "وتجارت": ("ضجار", "طجار", ["وتجارت", "تجارت", "تجار", "جار"]),
-    "فزر": ("ضفذر", "طفذر", ["فزر", "فذر"]),
+    "فزر": ("ضفذر", "طفذر", ["فزر", "فذر", "پویا", "پويا", "زرکان", "زركان"]),
     "طلا": ("ضطلا", "ططلا", ["طلا"]),
     "کهربا": ("ضکهربا", "طکهربا", ["کهربا"]),
     "دارونو": ("ضدرو", "طدور", ["دارونو", "دارو", "درو", "دور"]),
@@ -124,7 +123,7 @@ def find_best_real_option_contract(
     signal_type: str,
     stock_price: float,
 ) -> dict | None:
-  """موتور هوشمند جستجوی دقیق نماد قراردادها با فیلتر سررسیدهای منقضی (DTE >= 7)."""
+  """موتور هوشمند جستجوی دقیق نماد قراردادها."""
   if not all_market_items or not underlying_symbol:
     return None
 
@@ -187,13 +186,23 @@ def find_best_real_option_contract(
     # 🎯 محاسبه روزهای باقیمانده تا سررسید (DTE)
     dte = get_days_to_expiration(item.get("lvc", ""))
 
-    # 🛑 فیلتر نهایی: حذف تمام قراردادهای منقضی یا با سررسید کمتر از ۷ روز!
-    if dte < 7 or dte > 120:
+    # 🛑 حذف فقط قراردادهایی که در گذشته منقضی شده‌اند (DTE < 1)
+    if dte < 1 or dte > 180:
       continue
 
-    # 🎯 استخراج قیمت
+    # 🎯 استخراج قیمت معتبر (با چندین سطح پشتیبان)
     price = 0.0
-    for p_key in ["pDrCotVal", "pcl", "pf", "pdv", "pmd", "pmo", "py"]:
+    for p_key in [
+        "pDrCotVal",
+        "pcl",
+        "pf",
+        "pdv",
+        "pmd",
+        "pmo",
+        "pd1",
+        "po1",
+        "py",
+    ]:
       p_val = _f(item.get(p_key))
       if p_val > 0:
         price = p_val
@@ -224,7 +233,7 @@ def find_best_real_option_contract(
   if not candidates:
     return None
 
-  # اولویت‌دهی: ۱. قراردادهای دارای معامله فعال ۲. پرحجم‌ترین ۳. نزدیک‌ترین قیمت اعمال
+  # اولویت‌دهی: ۱. قراردادهای دارای معامله ۲. پرحجم‌ترین ۳. نزدیک‌ترین به قیمت فعلی
   candidates.sort(
       key=lambda x: (
           x["volume"] > 0,
@@ -1071,22 +1080,26 @@ def analyze_tomorrow_status(
     od = option_decision(row)
     row.update(od)
 
-    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (با فیلتر DTE >= 7)
+    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (با فیلتر DTE >= 1)
     real_opt = find_best_real_option_contract(
         all_market_items, symbol, row["option_label"], last_price
     )
     if real_opt and real_opt["price"] > 0:
+      is_call_type = "CALL" in row["option_label"]
       opt_eval = evaluate_option_contract(
           stock_price=last_price,
           strike_price=real_opt["strike"],
           days_to_expire=real_opt["dte"],
           option_market_price=real_opt["price"],
+          is_call=is_call_type,
           historical_volatility=0.35,
       )
       row["opt_real_symbol"] = f"{real_opt['symbol']} ({real_opt['dte']}d)"
       row["opt_real_price"] = int(real_opt["price"])
       row["opt_bubble_status"] = opt_eval["status"]
       row["opt_bubble_class"] = opt_eval["status_class"]
+      row["opt_breakeven_stock"] = opt_eval["breakeven_stock"]
+      row["opt_breakeven_move_pct"] = opt_eval["breakeven_move_pct"]
       row["opt_sl"] = opt_eval["sl_price"]
       row["opt_tp1"] = opt_eval["tp1_price"]
     else:
@@ -1094,6 +1107,8 @@ def analyze_tomorrow_status(
       row["opt_real_price"] = 0
       row["opt_bubble_status"] = "—"
       row["opt_bubble_class"] = "text-muted"
+      row["opt_breakeven_stock"] = 0
+      row["opt_breakeven_move_pct"] = 0
       row["opt_sl"] = 0
       row["opt_tp1"] = 0
 
@@ -1172,10 +1187,19 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
         else "—"
     )
 
+    be_move_sign = "+" if item.get("opt_breakeven_move_pct", 0) >= 0 else ""
+    be_html = (
+        f"سربه‌سر سهم: {item.get('opt_breakeven_stock', 0):,}"
+        f" ({be_move_sign}{item.get('opt_breakeven_move_pct', 0)}%)"
+        if item.get("opt_breakeven_stock", 0) > 0
+        else ""
+    )
+
     opt_details_html = f"""
-        <div style="font-size:11px; margin-top:4px; line-height:1.5;">
+        <div style="font-size:10.5px; margin-top:4px; line-height:1.5;">
             🎯 <strong style="color:#facc15;">نماد: {opt_sym_txt}</strong> ({opt_price_txt})<br/>
-            حباب: <span class="{item['opt_bubble_class']}">{item['opt_bubble_status']}</span><br/>
+            حباب/ریسک: <span class="{item['opt_bubble_class']}">{item['opt_bubble_status']}</span><br/>
+            <span style="color:#cbd5e1;">{be_html}</span><br/>
             <span style="color:#f87171;">SL: {item['opt_sl']:,}</span> | 
             <span style="color:#4ade80;">TP1: {item['opt_tp1']:,}</span>
         </div>
@@ -1215,7 +1239,7 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Navasanj | فیلتر سررسیدهای منقضی (DTE >= 7) + قیمت زنده واقعی</title>
+  <title>Navasanj | تحلیل نقطه سه‌به‌سر سهم و مدیریت IV Crush</title>
   <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" />
   <style>
     * {{ box-sizing:border-box; font-family:Vazirmatn,sans-serif; }}
@@ -1254,7 +1278,7 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
 </head>
 <body>
   <div class="header">
-    <div class="title">🤖 Navasanj — فیلتر سررسیدهای منقضی (DTE >= 7) + قیمت زنده واقعی</div>
+    <div class="title">🤖 Navasanj — تحلیل نقطه سه‌به‌سر سهم و مدیریت IV Crush</div>
     <div style="color:#38bdf8; font-weight:bold;">{ml_status_text}</div>
   </div>
 
@@ -1288,7 +1312,7 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
     <thead>
       <tr>
         <th>نماد پایه</th>
-        <th>🎯 تصمیم + نماد دقیق قرارداد اختیار (فعال)</th>
+        <th>🎯 تصمیم + نماد قرارداد + سه‌به‌سر سهم</th>
         <th>🤖 احتمالات ML (فردا)</th>
         <th>آخرین</th>
         <th>قدرت خریدار</th>
@@ -1331,14 +1355,11 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
     f.write(html)
   path = os.path.abspath(out)
   webbrowser.open(f"file://{path}")
-  print(
-      "✅ داشبورد تصمیم آپشن + شناسه زنده قراردادها با موفقیت بروزرسانی شد:"
-      f" {path}"
-  )
+  print(f"✅ داشبورد جدید با موفقیت بروزرسانی شد: {path}")
 
 
 def main():
-  print("🚀 Navasanj | جستجوی دقیق نماد قراردادها...")
+  print("🚀 Navasanj | ارتقا بر اساس مفاهیم سه‌به‌سر و حباب ترس...")
 
   ml_engine = NavasanjML()
   trained = ml_engine.train()
