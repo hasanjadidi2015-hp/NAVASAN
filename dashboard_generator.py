@@ -22,7 +22,6 @@ def _f(val, default=0.0) -> float:
 
 
 def jalali_to_gregorian(jy: int, jm: int, jd: int) -> tuple[int, int, int]:
-  """مبدل دقیق تاریخ شمسی به میلادی جهت محاسبه دقیق روزهای باقیمانده تا سررسید (DTE)."""
   jy += 1595
   days = -355668 + (365 * jy) + (jy // 33) * 8 + ((jy % 33) + 3) // 4 + jd
   if jm < 7:
@@ -68,32 +67,24 @@ def jalali_to_gregorian(jy: int, jm: int, jd: int) -> tuple[int, int, int]:
 
 
 def get_days_to_expiration(lvc_text: str) -> int:
-  """استخراج تاریخ شمسی سررسید از اسم قرارداد و محاسبه روزهای باقیمانده."""
   if not lvc_text:
     return 30
-
   match = re.search(
       r"(1[34]\d{2})[/\.-](0?[1-9]|1[0-2])[/\.-](0?[1-9]|[12]\d|3[01])",
       lvc_text,
   )
   if not match:
-    return 30  # مهلت تخمینی پیش‌فرض در صورت عدم وجود تاریخ شفاف
-
+    return 30
   try:
-    jy = int(match.group(1))
-    jm = int(match.group(2))
-    jd = int(match.group(3))
-
+    jy, jm, jd = int(match.group(1)), int(match.group(2)), int(match.group(3))
     gy, gm, gd = jalali_to_gregorian(jy, jm, jd)
     expire_date = datetime.date(gy, gm, gd)
     today = datetime.date.today()
-    dte = (expire_date - today).days
-    return dte
+    return (expire_date - today).days
   except Exception:
     return 30
 
 
-# 🎯 جدول نهایی نگاشت پیشوندهای دقیق اختیار معامله (با افزودن نام شرکت‌ها)
 OPTION_PREFIX_MAP = {
     "اهرم": ("ضهرم", "طهرم", ["اهرم", "هرم"]),
     "فملی": ("ضملی", "طملی", ["فملی", "فملي", "ملی", "ملي"]),
@@ -108,12 +99,9 @@ OPTION_PREFIX_MAP = {
     "وبصادر": ("ضصاد", "طصاد", ["وبصادر", "صادر", "صاد"]),
     "وتجارت": ("ضجار", "طجار", ["وتجارت", "تجارت", "تجار", "جار"]),
     "فزر": ("ضفذر", "طفذر", ["فزر", "فذر", "پویا", "پويا", "زرکان", "زركان"]),
-    "طلا": ("ضطلا", "ططلا", ["طلا"]),
-    "کهربا": ("ضکهربا", "طکهربا", ["کهربا"]),
     "دارونو": ("ضدرو", "طدور", ["دارونو", "دارو", "درو", "دور"]),
     "اطلس": ("ضاطلس", "طاطلس", ["اطلس"]),
     "موج": ("ضموج", "طموج", ["موج"]),
-    "بساما": ("ضبساما", "طبساما", ["بساما", "بسام"]),
 }
 
 
@@ -123,7 +111,6 @@ def find_best_real_option_contract(
     signal_type: str,
     stock_price: float,
 ) -> dict | None:
-  """موتور هوشمند جستجوی دقیق نماد قراردادها."""
   if not all_market_items or not underlying_symbol:
     return None
 
@@ -131,8 +118,7 @@ def find_best_real_option_contract(
   norm_underlying = normalize_fa(underlying_symbol)
 
   prefix_tuple = OPTION_PREFIX_MAP.get(norm_underlying)
-  lva_prefixes = []
-  lvc_keywords = [norm_underlying]
+  lva_prefixes, lvc_keywords = [], [norm_underlying]
 
   if prefix_tuple:
     prefix = prefix_tuple[0] if is_call else prefix_tuple[1]
@@ -141,7 +127,6 @@ def find_best_real_option_contract(
 
   p_char = "ض" if is_call else "ط"
   lva_prefixes.append(p_char + norm_underlying)
-
   candidates = []
 
   for item in all_market_items:
@@ -162,35 +147,26 @@ def find_best_real_option_contract(
             or "فروش" in lvc
         )
     )
-
     if not is_opt_type:
       continue
 
-    match = False
-    for pfx in lva_prefixes:
-      pfx_clean = pfx.replace("ذ", "ز")
-      if pfx_clean and lva.startswith(pfx_clean):
-        match = True
-        break
-
+    match = any(
+        pfx.replace("ذ", "ز") and lva.startswith(pfx.replace("ذ", "ز"))
+        for pfx in lva_prefixes
+    )
     if not match:
-      for kw in lvc_keywords:
-        kw_clean = kw.replace("ذ", "ز")
-        if kw_clean and (kw_clean in lvc or kw_clean in lva):
-          match = True
-          break
-
+      match = any(
+          kw.replace("ذ", "ز")
+          and (kw.replace("ذ", "ز") in lvc or kw.replace("ذ", "ز") in lva)
+          for kw in lvc_keywords
+      )
     if not match:
       continue
 
-    # 🎯 محاسبه روزهای باقیمانده تا سررسید (DTE)
     dte = get_days_to_expiration(item.get("lvc", ""))
-
-    # 🛑 حذف فقط قراردادهایی که در گذشته منقضی شده‌اند (DTE < 1)
     if dte < 1 or dte > 180:
       continue
 
-    # 🎯 استخراج قیمت معتبر (با چندین سطح پشتیبان)
     price = 0.0
     for p_key in [
         "pDrCotVal",
@@ -208,7 +184,7 @@ def find_best_real_option_contract(
         price = p_val
         break
 
-    if price <= 0:
+    if price <= 10:
       continue
 
     volume = _f(item.get("qtj", item.get("qTotTran5J")))
@@ -217,7 +193,6 @@ def find_best_real_option_contract(
     match_strike = re.search(r"-(\d+)-", lvc)
     if match_strike:
       strike = _f(match_strike.group(1))
-
     if strike <= 0:
       strike = stock_price * 1.05 if is_call else stock_price * 0.95
 
@@ -233,7 +208,6 @@ def find_best_real_option_contract(
   if not candidates:
     return None
 
-  # اولویت‌دهی: ۱. قراردادهای دارای معامله ۲. پرحجم‌ترین ۳. نزدیک‌ترین به قیمت فعلی
   candidates.sort(
       key=lambda x: (
           x["volume"] > 0,
@@ -246,7 +220,6 @@ def find_best_real_option_contract(
 
 
 def option_decision(row: dict) -> dict:
-  """تصمیم یک‌خطی مخصوص نوسان‌گیری آپشن روز بعد."""
   p = _f(row.get("pressure_score"))
   power = _f(row.get("buyer_power"), 1.0)
   alpha = _f(row.get("alpha_market"))
@@ -267,21 +240,18 @@ def option_decision(row: dict) -> dict:
         "option_class": "opt-call-strong",
         "option_reason": "فشار+قدرت هم‌جهت صعودی",
     }
-
   if (not bull_trap) and p >= 78 and power >= 1.20 and eg_strong:
     return {
         "option_label": "CALL آماده‌باش 🟢🟢",
         "option_class": "opt-call-strong",
         "option_reason": "فشار بالا + شتاب پایان بازار",
     }
-
   if (not bull_trap) and p >= 68 and power >= 1.15 and not eg_weak:
     return {
         "option_label": "CALL محتاط 🟢",
         "option_class": "opt-call-soft",
         "option_reason": "صعودی با کیفیت متوسط",
     }
-
   if (
       (not bull_trap)
       and p >= 70
@@ -294,42 +264,36 @@ def option_decision(row: dict) -> dict:
         "option_class": "opt-call-soft",
         "option_reason": "فشار خوب ولی قدرت متوسط",
     }
-
   if (not bear_accum) and p <= 30 and power <= 0.80 and not eg_strong:
     return {
         "option_label": "PUT آماده‌باش 🔴🔴",
         "option_class": "opt-put-strong",
         "option_reason": "فشار+قدرت هم‌جهت نزولی",
     }
-
   if (not bear_accum) and p <= 28 and is_sell_q and power <= 0.90:
     return {
         "option_label": "PUT آماده‌باش 🔴🔴",
         "option_class": "opt-put-strong",
         "option_reason": "صف فروش + فشار خیلی ضعیف",
     }
-
   if (not bear_accum) and p <= 38 and power <= 0.90 and not eg_strong:
     return {
         "option_label": "PUT محتاط 🔴",
         "option_class": "opt-put-soft",
         "option_reason": "نزول محتمل با ریسک برگشت",
     }
-
   if (not bear_accum) and p <= 40 and power <= 0.85 and alpha <= -0.5:
     return {
         "option_label": "PUT محتاط 🔴",
         "option_class": "opt-put-soft",
         "option_reason": "ضعیف‌تر از بازار + خریدار کم‌قدرت",
     }
-
   if bull_trap:
     return {
         "option_label": "NO TRADE ⚪",
         "option_class": "opt-no",
         "option_reason": "تله گاوی / صف بی‌کیفیت",
     }
-
   if bear_accum and p <= 45:
     return {
         "option_label": "NO TRADE ⚪",
@@ -1080,7 +1044,7 @@ def analyze_tomorrow_status(
     od = option_decision(row)
     row.update(od)
 
-    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (با فیلتر DTE >= 1)
+    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (ذخیره حجم معامله جهت رتبه‌بندی)
     real_opt = find_best_real_option_contract(
         all_market_items, symbol, row["option_label"], last_price
     )
@@ -1096,6 +1060,7 @@ def analyze_tomorrow_status(
       )
       row["opt_real_symbol"] = f"{real_opt['symbol']} ({real_opt['dte']}d)"
       row["opt_real_price"] = int(real_opt["price"])
+      row["opt_real_volume"] = int(real_opt["volume"])  # 🎯 ذخیره حجم زنده
       row["opt_bubble_status"] = opt_eval["status"]
       row["opt_bubble_class"] = opt_eval["status_class"]
       row["opt_breakeven_stock"] = opt_eval["breakeven_stock"]
@@ -1105,6 +1070,7 @@ def analyze_tomorrow_status(
     else:
       row["opt_real_symbol"] = "قرارداد فعال یافت نشد"
       row["opt_real_price"] = 0
+      row["opt_real_volume"] = 0
       row["opt_bubble_status"] = "—"
       row["opt_bubble_class"] = "text-muted"
       row["opt_breakeven_stock"] = 0
@@ -1115,6 +1081,129 @@ def analyze_tomorrow_status(
     return row
   except Exception:
     return None
+
+
+def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
+  """موتور هوشمند ساخت تیتر اصلی — رتبه‌بندی فوق‌العاده دقیق بر اساس 'حجم نقدشوندگی زنده اختیار معامله'."""
+  if not analyzed_data:
+    return ""
+
+  valid_candidates = []
+
+  # ۱. استخراج نمادهای دارای سیگنال قوی، قیمت معتبر و حجم معاملات زنده بالا
+  for item in analyzed_data:
+    opt_class = item.get("option_class", "")
+    opt_price = item.get("opt_real_price", 0)
+    opt_vol = item.get("opt_real_volume", 0)
+    opt_symbol = item.get("opt_real_symbol", "")
+    is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
+
+    # 🛑 فیلتر سخت‌گیرانه نقدشوندگی: حتماً دارای معامله زنده و قیمت معتبر بالای ۵۰ ریال
+    if opt_class in ("opt-call-strong", "opt-put-strong"):
+      if (
+          opt_price >= 50
+          and opt_vol > 0
+          and not is_iv_crush
+          and "یافت نشد" not in opt_symbol
+      ):
+        valid_candidates.append(item)
+
+  # ۲. اگر سیگنال قوی نبود، بررسی سیگنال‌های محتاط بسیار پرقدرت
+  if not valid_candidates:
+    for item in analyzed_data:
+      opt_class = item.get("option_class", "")
+      opt_price = item.get("opt_real_price", 0)
+      opt_vol = item.get("opt_real_volume", 0)
+      opt_symbol = item.get("opt_real_symbol", "")
+      is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
+
+      if (
+          opt_class in ("opt-call-soft", "opt-put-soft")
+          and item.get("pressure_score", 0) >= 75
+      ):
+        if (
+            opt_price >= 50
+            and opt_vol > 0
+            and not is_iv_crush
+            and "یافت نشد" not in opt_symbol
+        ):
+          valid_candidates.append(item)
+
+  # ۳. اگر هیچ معامله نقدشونده‌ای پیدا نشد 👈 صادر کردن دستور NO TRADE
+  if not valid_candidates:
+    return """
+        <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid #ef4444; border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.25);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                <span style="font-size: 28px;">⛔</span>
+                <h2 style="margin: 0; color: #f87171; font-size: 20px; font-weight: 800;">دستورالعمل معامله فردا: هیچ معامله‌ای انجام ندهید! (NO TRADE)</h2>
+            </div>
+            <p style="margin: 0; color: #cbd5e1; font-size: 13.5px; line-height: 1.7;">
+                بررسی تمام الزامات سیستم نشان می‌دهد بازار فردا دارای سیگنال هم‌جهت با نقدشوندگی عالی و حباب منصفانه نیست. برای حفظ سرمایه، پیشنهاد می‌شود فردا <strong>دست نگه دارید</strong> و هیچ موقعیت جدیدی در اختیار معامله اتخاذ نکنید.
+            </p>
+        </div>
+        """
+
+  # 🎯 مرتب‌سازی نهایی بر اساس حجم زنده معاملات آپشن (پرحجم‌ترین نماد مثل اهرم، خودرو، فملی برنده می‌شود!)
+  valid_candidates.sort(
+      key=lambda x: (x.get("opt_real_volume", 0), x.get("pressure_score", 0)),
+      reverse=True,
+  )
+  top_target = valid_candidates[0]
+
+  is_call = "CALL" in top_target["option_label"]
+  badge_bg = "rgba(34,197,94,0.2)" if is_call else "rgba(239,68,68,0.2)"
+  badge_border = "#22c55e" if is_call else "#ef4444"
+  badge_color = "#4ade80" if is_call else "#f87171"
+  action_type_fa = "خرید اختیار خرید (CALL)" if is_call else "خرید اختیار فروش (PUT)"
+
+  ml_p2 = top_target.get("p_2pct", 0)
+  ml_txt = (
+      f"احتمال سود +۲٪ فردا: {ml_p2}%"
+      if top_target.get("ml_ready")
+      else "احتمال صعود بالا"
+  )
+
+  return f"""
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid {badge_border}; border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 26px;">🎯</span>
+                <div>
+                    <span style="font-size: 12px; color: #94a3b8; font-weight: 600;">دستورالعمل اجرایی معامله فردا (ویژه معامله‌گر):</span>
+                    <h2 style="margin: 2px 0 0 0; color: #38bdf8; font-size: 19px; font-weight: 800;">
+                        {action_type_fa} روی نماد <span style="color:#facc15;">{top_target['symbol']}</span>
+                    </h2>
+                </div>
+            </div>
+            <div style="background: {badge_bg}; border: 1px solid {badge_border}; color: {badge_color}; padding: 6px 16px; border-radius: 20px; font-weight: 800; font-size: 13px;">
+                {top_target['option_label']}
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; background: #0f172a; padding: 14px; border-radius: 12px; border: 1px solid #334155;">
+            <div>
+                <span style="color: #94a3b8; font-size: 11px; display: block;">نماد دقیق قرارداد اختیار:</span>
+                <strong style="color: #facc15; font-size: 15px;">{top_target.get('opt_real_symbol', '—')}</strong>
+            </div>
+            <div>
+                <span style="color: #94a3b8; font-size: 11px; display: block;">قیمت زنده پریمیوم:</span>
+                <strong style="color: #f8fafc; font-size: 14px;">{top_target.get('opt_real_price', 0):,} ریال</strong>
+            </div>
+            <div>
+                <span style="color: #94a3b8; font-size: 11px; display: block;">حد ضرر (SL) / حد سود (TP1):</span>
+                <strong style="color: #f87171; font-size: 13px;">SL: {top_target.get('opt_sl', 0):,}</strong> | <strong style="color: #4ade80; font-size: 13px;">TP1: {top_target.get('opt_tp1', 0):,}</strong>
+            </div>
+            <div>
+                <span style="color: #94a3b8; font-size: 11px; display: block;">قدرت خریدار / هوش مصنوعی:</span>
+                <strong style="color: #38bdf8; font-size: 13px;">قدرت: {top_target['buyer_power']} | {ml_txt}</strong>
+            </div>
+        </div>
+
+        <div style="margin-top: 12px; font-size: 12px; color: #cbd5e1; line-height: 1.7;">
+            📌 <strong>دستورالعمل سفارش‌گذاری ساعت ۰۹:۰۰ فردا:</strong> نماد <strong style="color:#facc15;">{top_target.get('opt_real_symbol', '')}</strong> را در کارگزاری جستجو کنید. در ۳۰ دقیقه اول بازار، اگر سهم پایه ({top_target['symbol']}) صفر تابلو یا منفی کوچک داد، با رعایت حدضرر {top_target.get('opt_sl', 0):,} ریال وارد شوید.
+        </div>
+    </div>
+    """
 
 
 def generate_html_dashboard(analyzed_data: list, regime_info: dict):
@@ -1135,7 +1224,9 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
     sample_cnt = analyzed_data[0].get("sample_count", 0)
     ml_status_text = f"🤖 هوش مصنوعی (ML): فعال و آموزش‌دیده روی {sample_cnt} نمونه تاریخی"
 
-  rows_html = ""
+  bulletin_html = generate_daily_bulletin(analyzed_data, regime_info)
+
+  cards_html = ""
   for item in analyzed_data:
     p_class = "text-green" if item["last_change_pct"] >= 0 else "text-red"
     power = item["buyer_power"]
@@ -1163,22 +1254,22 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
       queue_info = "—"
 
     capita_txt = (
-        f"{item['buyer_capita']} م / {item['seller_capita']} م"
+        f"{item['buyer_capita']}م / {item['seller_capita']}م"
         if item["has_real_data"]
         else "—"
     )
 
     if item.get("ml_ready"):
       ml_html = f"""
-            <div style="font-size:11px; line-height:1.4;">
-                <span style="color:#4ade80;">مثبت: {item['p_pos']}%</span> | 
-                <span style="color:#38bdf8;">+2٪: {item['p_2pct']}%</span><br/>
-                <span style="color:#facc15;">+4٪: {item['p_4pct']}%</span> | 
-                <span style="color:#f87171;">صف: {item['p_queue']}%</span>
+            <div class="ml-box">
+                <div><span class="lbl">مثبت:</span> <strong style="color:#4ade80;">{item['p_pos']}%</strong></div>
+                <div><span class="lbl">+۲٪ سود:</span> <strong style="color:#38bdf8;">{item['p_2pct']}%</strong></div>
+                <div><span class="lbl">+۴٪ سود:</span> <strong style="color:#facc15;">{item['p_4pct']}%</strong></div>
+                <div><span class="lbl">صف خرید:</span> <strong style="color:#f87171;">{item['p_queue']}%</strong></div>
             </div>
             """
     else:
-      ml_html = "<span class='text-muted'>نیازمند دیتا</span>"
+      ml_html = '<div class="ml-box text-muted">نیازمند داده‌های بیشتر...</div>'
 
     opt_sym_txt = item.get("opt_real_symbol", "نامشخص")
     opt_price_txt = (
@@ -1186,7 +1277,6 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
         if item.get("opt_real_price", 0) > 0
         else "—"
     )
-
     be_move_sign = "+" if item.get("opt_breakeven_move_pct", 0) >= 0 else ""
     be_html = (
         f"سربه‌سر سهم: {item.get('opt_breakeven_stock', 0):,}"
@@ -1205,33 +1295,61 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
         </div>
         """
 
-    rows_html += f"""
-        <tr class="stock-row" data-status="{item['status_class']}" data-option="{item['option_class']}">
-            <td class="bold sym">{item['symbol']}</td>
-            <td>
-                <span class="opt-badge {item['option_class']}">{item['option_label']}</span>
-                <div class="text-muted">{item['option_reason']}</div>
+    cards_html += f"""
+        <div class="stock-card" data-status="{item['status_class']}" data-option="{item['option_class']}">
+            <div class="card-header">
+                <div>
+                    <span class="sym-title">{item['symbol']}</span>
+                    <span class="text-muted" style="margin-right:6px; font-size:11px;">{item['name']}</span>
+                </div>
+                <span class="badge {item['status_class']}">{item['prediction']}</span>
+            </div>
+
+            <div class="opt-banner {item['option_class']}">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="opt-badge">{item['option_label']}</span>
+                    <span style="font-size:11px; opacity:0.9;">{item['option_reason']}</span>
+                </div>
                 {opt_details_html}
-            </td>
-            <td>{ml_html}</td>
-            <td>{item['last_price']:,} <span class="{p_class}">({item['last_change_pct']}%)</span></td>
-            <td class="bold {power_class}">{item['buyer_power']}</td>
-            <td>{capita_txt}</td>
-            <td>
-              <div class="pressure-wrap"><div class="pressure-bar" style="width:{item['pressure_score']}%"></div><span>{item['pressure_score']}</span></div>
-            </td>
-            <td class="bold {a_class}">{item['alpha_market']:+.2f}%</td>
-            <td>
-              <div>{item['endgame_label']}</div>
-              <div class="text-muted">EG:{item['endgame_score']}</div>
-            </td>
-            <td>
-              <div>{item['candle_label']}</div>
-              <div class="text-muted">CLV:{item['clv']:+.2f}</div>
-            </td>
-            <td>{queue_info}</td>
-            <td><span class="badge {item['status_class']}">{item['prediction']}</span></td>
-        </tr>
+            </div>
+
+            {ml_html}
+
+            <div class="metrics-grid">
+                <div class="metric-item">
+                    <span class="lbl">آخرین قیمت</span>
+                    <span class="val">{item['last_price']:,} <small class="{p_class}">({item['last_change_pct']}%)</small></span>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">قدرت خریدار</span>
+                    <span class="val {power_class}">{item['buyer_power']}</span>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">سرانه (خ/ف)</span>
+                    <span class="val">{capita_txt}</span>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">فشار خرید</span>
+                    <div class="pressure-wrap" style="margin-top:3px;"><div class="pressure-bar" style="width:{item['pressure_score']}%"></div><span>{item['pressure_score']}</span></div>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">Alpha بازار</span>
+                    <span class="val {a_class}">{item['alpha_market']:+.2f}%</span>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">روند پایانی</span>
+                    <span class="val">{item['endgame_label']} <small class="text-muted">(EG:{item['endgame_score']})</small></span>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">کندل روز</span>
+                    <span class="val">{item['candle_label']} <small class="text-muted">(CLV:{item['clv']:+.2f})</small></span>
+                </div>
+                <div class="metric-item">
+                    <span class="lbl">وضعیت صف</span>
+                    <span class="val">{queue_info}</span>
+                </div>
+            </div>
+        </div>
         """
 
   html = f"""<!DOCTYPE html>
@@ -1239,47 +1357,61 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Navasanj | تحلیل نقطه سه‌به‌سر سهم و مدیریت IV Crush</title>
+  <title>Navasanj | دیده‌بان هوشمند کارتی</title>
   <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" />
   <style>
     * {{ box-sizing:border-box; font-family:Vazirmatn,sans-serif; }}
     body {{ background:#0f172a; color:#f8fafc; margin:0; padding:20px; }}
-    .header {{ display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; border-bottom:1px solid #334155; padding-bottom:14px; }}
+    .header {{ display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; border-bottom:1px solid #334155; padding-bottom:14px; align-items:center; }}
     .title {{ font-size:22px; font-weight:800; color:#38bdf8; }}
-    .regime,.summary {{ background:#1e293b; border:1px solid #334155; border-radius:12px; padding:12px 16px; margin:14px 0; display:flex; gap:14px; flex-wrap:wrap; }}
-    .controls {{ display:flex; gap:10px; margin:12px 0 18px; flex-wrap:wrap; }}
+    .regime,.summary {{ background:#1e293b; border:1px solid #334155; border-radius:12px; padding:12px 16px; margin:14px 0; display:flex; gap:16px; flex-wrap:wrap; font-size:13px; }}
+    .controls {{ display:flex; gap:10px; margin:16px 0 20px; flex-wrap:wrap; }}
     .search-box {{ padding:10px 14px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#fff; width:260px; }}
-    .filter-btn {{ padding:8px 14px; border-radius:8px; border:none; background:#334155; color:#fff; cursor:pointer; }}
+    .filter-btn {{ padding:8px 14px; border-radius:8px; border:none; background:#334155; color:#fff; cursor:pointer; font-weight:600; font-size:12px; transition:0.2s; }}
     .filter-btn.active,.filter-btn:hover {{ background:#0284c7; }}
-    table {{ width:100%; border-collapse:collapse; background:#1e293b; border-radius:12px; overflow:hidden; font-size:12.5px; }}
-    th,td {{ padding:10px 8px; text-align:right; border-bottom:1px solid #334155; white-space:nowrap; }}
-    th {{ background:#0b1329; color:#94a3b8; position:sticky; top:0; }}
-    tr:hover {{ background:#273549; }}
-    .sym {{ color:#38bdf8; font-size:15px; }}
+
+    .cards-grid {{ display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:16px; }}
+    .stock-card {{ background:#1e293b; border:1px solid #334155; border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:12px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.3); transition:transform 0.2s, border-color 0.2s; }}
+    .stock-card:hover {{ transform:translateY(-2px); border-color:#0284c7; }}
+    .card-header {{ display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; }}
+    .sym-title {{ font-size:18px; font-weight:800; color:#38bdf8; }}
+
+    .opt-banner {{ border-radius:8px; padding:10px 12px; border:1px solid #334155; }}
+    .opt-call-strong {{ background:rgba(34,197,94,.15); border-color:#22c55e; }}
+    .opt-call-soft {{ background:rgba(56,189,248,.15); border-color:#0ea5e9; }}
+    .opt-put-strong {{ background:rgba(239,68,68,.15); border-color:#ef4444; }}
+    .opt-put-soft {{ background:rgba(249,115,22,.15); border-color:#f97316; }}
+    .opt-no {{ background:rgba(148,163,184,.1); border-color:#64748b; }}
+    .opt-badge {{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,0.1); }}
+
+    .ml-box {{ background:#0f172a; border-radius:8px; padding:8px 12px; font-size:11px; display:grid; grid-template-columns:1fr 1fr; gap:6px; border:1px solid #334155; }}
+    .ml-box .lbl {{ color:#94a3b8; }}
+
+    .metrics-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px; background:#0f172a; padding:10px; border-radius:8px; }}
+    .metric-item {{ display:flex; flex-direction:column; gap:2px; }}
+    .metric-item .lbl {{ color:#94a3b8; font-size:10.5px; }}
+    .metric-item .val {{ font-weight:700; color:#f8fafc; }}
+
     .bold {{ font-weight:700; }}
-    .text-muted {{ color:#94a3b8; font-size:11px; }}
-    .text-green {{ color:#4ade80; font-weight:700; }}
-    .text-red {{ color:#f87171; font-weight:700; }}
-    .badge,.opt-badge {{ padding:6px 10px; border-radius:16px; font-size:12px; font-weight:800; display:inline-block; }}
-    .opt-call-strong {{ background:rgba(34,197,94,.25); color:#4ade80; border:1px solid #22c55e; }}
-    .opt-call-soft {{ background:rgba(56,189,248,.2); color:#38bdf8; border:1px solid #0ea5e9; }}
-    .opt-put-strong {{ background:rgba(239,68,68,.25); color:#f87171; border:1px solid #ef4444; }}
-    .opt-put-soft {{ background:rgba(249,115,22,.2); color:#fb923c; border:1px solid #f97316; }}
-    .opt-no {{ background:rgba(148,163,184,.15); color:#cbd5e1; border:1px solid #64748b; }}
+    .text-muted {{ color:#94a3b8; }}
+    .text-green {{ color:#4ade80; }}
+    .text-red {{ color:#f87171; }}
+    .badge {{ padding:4px 8px; border-radius:12px; font-size:10.5px; font-weight:700; }}
     .status-buy-queue {{ background:rgba(34,197,94,.2); color:#4ade80; border:1px solid #22c55e; }}
     .status-positive {{ background:rgba(56,189,248,.2); color:#38bdf8; }}
     .status-neutral {{ background:rgba(148,163,184,.2); color:#cbd5e1; }}
     .status-negative {{ background:rgba(249,115,22,.2); color:#fb923c; }}
     .status-sell-queue {{ background:rgba(239,68,68,.2); color:#f87171; border:1px solid #ef4444; }}
-    .pressure-wrap {{ position:relative; width:70px; height:18px; background:#334155; border-radius:9px; overflow:hidden; display:inline-block; }}
+
+    .pressure-wrap {{ position:relative; width:100%; height:16px; background:#334155; border-radius:8px; overflow:hidden; display:inline-block; }}
     .pressure-bar {{ position:absolute; right:0; top:0; bottom:0; background:#22c55e; }}
-    .pressure-wrap span {{ position:relative; z-index:1; font-size:11px; font-weight:800; display:flex; height:100%; align-items:center; justify-content:center; color:#fff; }}
+    .pressure-wrap span {{ position:relative; z-index:1; font-size:10px; font-weight:800; display:flex; height:100%; align-items:center; justify-content:center; color:#fff; }}
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="title">🤖 Navasanj — تحلیل نقطه سه‌به‌سر سهم و مدیریت IV Crush</div>
-    <div style="color:#38bdf8; font-weight:bold;">{ml_status_text}</div>
+    <div class="title">🤖 Navasanj — دیده‌بان هوشمند + تیتر دستورالعمل اجرایی فردا</div>
+    <div style="color:#38bdf8; font-weight:bold; font-size:13px;">{ml_status_text}</div>
   </div>
 
   <div class="regime">
@@ -1297,8 +1429,10 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
     <div>PUT قوی: <b style="color:#f87171">{counts.get('PUT آماده‌باش 🔴🔴',0)}</b></div>
   </div>
 
+  {bulletin_html}
+
   <div class="controls">
-    <input id="searchInput" class="search-box" placeholder="🔍 جستجوی نماد..." onkeyup="filterTable()" />
+    <input id="searchInput" class="search-box" placeholder="🔍 جستجوی نماد..." onkeyup="filterCards()" />
     <button class="filter-btn active" onclick="setOpt('all')">همه</button>
     <button class="filter-btn" onclick="setOpt('opt-call-strong')">CALL آماده‌باش</button>
     <button class="filter-btn" onclick="setOpt('opt-call-soft')">CALL محتاط</button>
@@ -1307,26 +1441,8 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
     <button class="filter-btn" onclick="setOpt('opt-put-strong')">PUT آماده‌باش</button>
   </div>
 
-  <div style="overflow-x:auto">
-  <table>
-    <thead>
-      <tr>
-        <th>نماد پایه</th>
-        <th>🎯 تصمیم + نماد قرارداد + سه‌به‌سر سهم</th>
-        <th>🤖 احتمالات ML (فردا)</th>
-        <th>آخرین</th>
-        <th>قدرت خریدار</th>
-        <th>سرانه</th>
-        <th>فشار</th>
-        <th>Alpha</th>
-        <th>پایانی بازار</th>
-        <th>کندل</th>
-        <th>صف</th>
-        <th>پیش‌بینی عمومی</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody">{rows_html}</tbody>
-  </table>
+  <div class="cards-grid" id="cardsGrid">
+    {cards_html}
   </div>
 
   <script>
@@ -1335,15 +1451,16 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
       currentOpt = v;
       document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
       event.target.classList.add('active');
-      filterTable();
+      filterCards();
     }}
-    function filterTable(){{
+    function filterCards(){{
       const search = document.getElementById('searchInput').value.toLowerCase();
-      document.querySelectorAll('.stock-row').forEach(row=>{{
-        const okSearch = row.innerText.toLowerCase().includes(search);
-        const opt = row.getAttribute('data-option');
+      document.querySelectorAll('.stock-card').forEach(card=>{{
+        const text = card.innerText.toLowerCase();
+        const opt = card.getAttribute('data-option');
+        const okSearch = text.includes(search);
         const okOpt = currentOpt === 'all' || opt === currentOpt;
-        row.style.display = (okSearch && okOpt) ? '' : 'none';
+        card.style.display = (okSearch && okOpt) ? 'flex' : 'none';
       }});
     }}
   </script>
@@ -1355,11 +1472,11 @@ def generate_html_dashboard(analyzed_data: list, regime_info: dict):
     f.write(html)
   path = os.path.abspath(out)
   webbrowser.open(f"file://{path}")
-  print(f"✅ داشبورد جدید با موفقیت بروزرسانی شد: {path}")
+  print(f"✅ داشبورد جدید با تیتر دستورالعمل فردا بروزرسانی شد: {path}")
 
 
 def main():
-  print("🚀 Navasanj | ارتقا بر اساس مفاهیم سه‌به‌سر و حباب ترس...")
+  print("🚀 Navasanj | ساخت داشبورد با تیتر دستورالعمل اصلی...")
 
   ml_engine = NavasanjML()
   trained = ml_engine.train()
