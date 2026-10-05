@@ -85,21 +85,22 @@ def get_days_to_expiration(lvc_text: str) -> int:
     return 30
 
 
+# 🎯 جدول نهایی و دقیق نگاشت پیشوندها (بدون عبارات کوتاه تداخلی مانند درو)
 OPTION_PREFIX_MAP = {
-    "اهرم": ("ضهرم", "طهرم", ["اهرم", "هرم"]),
-    "فملی": ("ضملی", "طملی", ["فملی", "فملي", "ملی", "ملي"]),
-    "وبملت": ("ضملت", "طملت", ["وبملت", "ملت"]),
-    "شستا": ("ضستا", "طستا", ["شستا", "ستا"]),
-    "شپنا": ("ضپنا", "طپنا", ["شپنا", "پنا"]),
-    "خساپا": ("ضسپا", "طسپا", ["خساپا", "ساپا", "سپا"]),
-    "خودرو": ("ضخود", "طخود", ["خودرو", "خودر", "خود"]),
+    "اهرم": ("ضهرم", "طهرم", ["اهرم"]),
+    "فملی": ("ضملی", "طملی", ["فملی", "فملي"]),
+    "وبملت": ("ضملت", "طملت", ["وبملت"]),
+    "شستا": ("ضستا", "طستا", ["شستا"]),
+    "شپنا": ("ضپنا", "طپنا", ["شپنا"]),
+    "خساپا": ("ضسپا", "طسپا", ["خساپا"]),
+    "خودرو": ("ضخود", "طخود", ["خودرو"]),
     "ذوب": ("ضذوب", "طذوب", ["ذوب"]),
-    "خبهمن": ("ضهمن", "طهمن", ["خبهمن", "بهمن", "همن"]),
-    "تاصیکو": ("ضتاس", "طتاس", ["تاصیکو", "تاصيكو", "صیکو", "تاس"]),
-    "وبصادر": ("ضصاد", "طصاد", ["وبصادر", "صادر", "صاد"]),
-    "وتجارت": ("ضجار", "طجار", ["وتجارت", "تجارت", "تجار", "جار"]),
-    "فزر": ("ضفذر", "طفذر", ["فزر", "فذر", "پویا", "پويا", "زرکان", "زركان"]),
-    "دارونو": ("ضدرو", "طدور", ["دارونو", "دارو", "درو", "دور"]),
+    "خبهمن": ("ضهمن", "طهمن", ["خبهمن"]),
+    "تاصیکو": ("ضتاس", "طتاس", ["تاصیکو", "تاصيكو"]),
+    "وبصادر": ("ضصاد", "طصاد", ["وبصادر"]),
+    "وتجارت": ("ضجار", "طجار", ["وتجارت"]),
+    "فزر": ("ضفذر", "طفذر", ["فزر", "فذر", "پویا زرکان", "پويا زركان"]),
+    "دارونو": ("ضدرو", "طدور", ["دارونو"]),
     "اطلس": ("ضاطلس", "طاطلس", ["اطلس"]),
     "موج": ("ضموج", "طموج", ["موج"]),
 }
@@ -118,20 +119,17 @@ def find_best_real_option_contract(
   norm_underlying = normalize_fa(underlying_symbol)
 
   prefix_tuple = OPTION_PREFIX_MAP.get(norm_underlying)
-  lva_prefixes, lvc_keywords = [], [norm_underlying]
+  if not prefix_tuple:
+    return None
 
-  if prefix_tuple:
-    prefix = prefix_tuple[0] if is_call else prefix_tuple[1]
-    lva_prefixes.append(normalize_fa(prefix))
-    lvc_keywords = [normalize_fa(kw) for kw in prefix_tuple[2]]
+  target_prefix = normalize_fa(prefix_tuple[0] if is_call else prefix_tuple[1])
+  keywords = [normalize_fa(kw) for kw in prefix_tuple[2]]
 
-  p_char = "ض" if is_call else "ط"
-  lva_prefixes.append(p_char + norm_underlying)
   candidates = []
 
   for item in all_market_items:
-    lva = normalize_fa(item.get("lva", "")).replace("ذ", "ز")
-    lvc = normalize_fa(item.get("lvc", "")).replace("ذ", "ز")
+    lva = normalize_fa(item.get("lva", ""))
+    lvc = normalize_fa(item.get("lvc", ""))
 
     is_opt_type = (
         ("ض" in lva
@@ -150,17 +148,23 @@ def find_best_real_option_contract(
     if not is_opt_type:
       continue
 
-    match = any(
-        pfx.replace("ذ", "ز") and lva.startswith(pfx.replace("ذ", "ز"))
-        for pfx in lva_prefixes
+    # 🛑 فیلتر محافظتی ۱: جلوگیری از تداخل خودرو و دارونو!
+    if norm_underlying == "دارونو" and (
+        "خودرو" in lvc or "خودرو" in lva or lva.startswith("طخود")
+    ):
+      continue
+
+    # تطبیق دقیق پیشوند یا کلمه کلیدی کامل
+    match_prefix = lva.startswith(target_prefix) or lva.replace(
+        "ذ", "ز"
+    ).startswith(target_prefix.replace("ذ", "ز"))
+    match_kw = any(
+        (kw in lvc or kw in lva)
+        for kw in keywords
+        if len(kw) > 3 or kw == "ذوب" or kw == "موج"
     )
-    if not match:
-      match = any(
-          kw.replace("ذ", "ز")
-          and (kw.replace("ذ", "ز") in lvc or kw.replace("ذ", "ز") in lva)
-          for kw in lvc_keywords
-      )
-    if not match:
+
+    if not (match_prefix or match_kw):
       continue
 
     dte = get_days_to_expiration(item.get("lvc", ""))
@@ -188,11 +192,11 @@ def find_best_real_option_contract(
       continue
 
     volume = _f(item.get("qtj", item.get("qTotTran5J")))
-
     strike = 0.0
     match_strike = re.search(r"-(\d+)-", lvc)
     if match_strike:
       strike = _f(match_strike.group(1))
+
     if strike <= 0:
       strike = stock_price * 1.05 if is_call else stock_price * 0.95
 
@@ -1044,7 +1048,7 @@ def analyze_tomorrow_status(
     od = option_decision(row)
     row.update(od)
 
-    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (ذخیره حجم معامله جهت رتبه‌بندی)
+    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (با فیلتر DTE >= 1)
     real_opt = find_best_real_option_contract(
         all_market_items, symbol, row["option_label"], last_price
     )
@@ -1060,7 +1064,7 @@ def analyze_tomorrow_status(
       )
       row["opt_real_symbol"] = f"{real_opt['symbol']} ({real_opt['dte']}d)"
       row["opt_real_price"] = int(real_opt["price"])
-      row["opt_real_volume"] = int(real_opt["volume"])  # 🎯 ذخیره حجم زنده
+      row["opt_real_volume"] = int(real_opt["volume"])
       row["opt_bubble_status"] = opt_eval["status"]
       row["opt_bubble_class"] = opt_eval["status_class"]
       row["opt_breakeven_stock"] = opt_eval["breakeven_stock"]
@@ -1084,52 +1088,79 @@ def analyze_tomorrow_status(
 
 
 def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
-  """موتور هوشمند ساخت تیتر اصلی — رتبه‌بندی فوق‌العاده دقیق بر اساس 'حجم نقدشوندگی زنده اختیار معامله'."""
+  """موتور هوشمند ساخت تیتر اصلی — با فیلتر محافظتی عدم تطابق نمادها."""
   if not analyzed_data:
     return ""
 
   valid_candidates = []
 
-  # ۱. استخراج نمادهای دارای سیگنال قوی، قیمت معتبر و حجم معاملات زنده بالا
   for item in analyzed_data:
     opt_class = item.get("option_class", "")
     opt_price = item.get("opt_real_price", 0)
     opt_vol = item.get("opt_real_volume", 0)
-    opt_symbol = item.get("opt_real_symbol", "")
+    opt_symbol = normalize_fa(item.get("opt_real_symbol", ""))
+    stock_symbol = normalize_fa(item.get("symbol", ""))
     is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
 
-    # 🛑 فیلتر سخت‌گیرانه نقدشوندگی: حتماً دارای معامله زنده و قیمت معتبر بالای ۵۰ ریال
+    # 🛑 فیلتر محافظتی ۲: حتماً نماد اختیار با نماد پایه مطابقت داشته باشد! (جلوگیری از پیشنهاد طخود برای دارونو!)
+    prefix_info = OPTION_PREFIX_MAP.get(stock_symbol)
+    if prefix_info:
+      expected_pfx = (
+          prefix_info[0]
+          if "CALL" in item.get("option_label", "")
+          else prefix_info[1]
+      )
+      keywords = prefix_info[2]
+      # چک تطبیق پیشوند یا کلمه کلیدی
+      is_correct_match = opt_symbol.startswith(expected_pfx) or any(
+          kw in opt_symbol for kw in keywords
+      )
+      if not is_correct_match:
+        continue
+
+    has_good_liquidity = (
+        opt_price >= 50 and opt_vol > 0 and "یافت نشد" not in opt_symbol
+    )
+
     if opt_class in ("opt-call-strong", "opt-put-strong"):
-      if (
-          opt_price >= 50
-          and opt_vol > 0
-          and not is_iv_crush
-          and "یافت نشد" not in opt_symbol
-      ):
+      if has_good_liquidity and not is_iv_crush:
         valid_candidates.append(item)
 
-  # ۲. اگر سیگنال قوی نبود، بررسی سیگنال‌های محتاط بسیار پرقدرت
   if not valid_candidates:
     for item in analyzed_data:
       opt_class = item.get("option_class", "")
       opt_price = item.get("opt_real_price", 0)
       opt_vol = item.get("opt_real_volume", 0)
-      opt_symbol = item.get("opt_real_symbol", "")
+      opt_symbol = normalize_fa(item.get("opt_real_symbol", ""))
+      stock_symbol = normalize_fa(item.get("symbol", ""))
       is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
+
+      prefix_info = OPTION_PREFIX_MAP.get(stock_symbol)
+      if prefix_info:
+        expected_pfx = (
+            prefix_info[0]
+            if "CALL" in item.get("option_label", "")
+            else prefix_info[1]
+        )
+        keywords = prefix_info[2]
+        if not (
+            opt_symbol.startswith(expected_pfx)
+            or any(kw in opt_symbol for kw in keywords)
+        ):
+          continue
+
+      has_good_liquidity = (
+          opt_price >= 50 and opt_vol > 0 and "یافت نشد" not in opt_symbol
+      )
 
       if (
           opt_class in ("opt-call-soft", "opt-put-soft")
           and item.get("pressure_score", 0) >= 75
+          and has_good_liquidity
+          and not is_iv_crush
       ):
-        if (
-            opt_price >= 50
-            and opt_vol > 0
-            and not is_iv_crush
-            and "یافت نشد" not in opt_symbol
-        ):
-          valid_candidates.append(item)
+        valid_candidates.append(item)
 
-  # ۳. اگر هیچ معامله نقدشونده‌ای پیدا نشد 👈 صادر کردن دستور NO TRADE
   if not valid_candidates:
     return """
         <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid #ef4444; border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.25);">
@@ -1143,7 +1174,6 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
         </div>
         """
 
-  # 🎯 مرتب‌سازی نهایی بر اساس حجم زنده معاملات آپشن (پرحجم‌ترین نماد مثل اهرم، خودرو، فملی برنده می‌شود!)
   valid_candidates.sort(
       key=lambda x: (x.get("opt_real_volume", 0), x.get("pressure_score", 0)),
       reverse=True,
