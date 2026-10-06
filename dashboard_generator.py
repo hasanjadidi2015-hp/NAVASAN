@@ -85,7 +85,6 @@ def get_days_to_expiration(lvc_text: str) -> int:
     return 30
 
 
-# 🎯 جدول نهایی و دقیق نگاشت پیشوندها (بدون عبارات کوتاه تداخلی مانند درو)
 OPTION_PREFIX_MAP = {
     "اهرم": ("ضهرم", "طهرم", ["اهرم"]),
     "فملی": ("ضملی", "طملی", ["فملی", "فملي"]),
@@ -148,13 +147,11 @@ def find_best_real_option_contract(
     if not is_opt_type:
       continue
 
-    # 🛑 فیلتر محافظتی ۱: جلوگیری از تداخل خودرو و دارونو!
     if norm_underlying == "دارونو" and (
         "خودرو" in lvc or "خودرو" in lva or lva.startswith("طخود")
     ):
       continue
 
-    # تطبیق دقیق پیشوند یا کلمه کلیدی کامل
     match_prefix = lva.startswith(target_prefix) or lva.replace(
         "ذ", "ز"
     ).startswith(target_prefix.replace("ذ", "ز"))
@@ -1048,7 +1045,7 @@ def analyze_tomorrow_status(
     od = option_decision(row)
     row.update(od)
 
-    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (با فیلتر DTE >= 1)
+    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله
     real_opt = find_best_real_option_contract(
         all_market_items, symbol, row["option_label"], last_price
     )
@@ -1088,21 +1085,24 @@ def analyze_tomorrow_status(
 
 
 def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
-  """موتور هوشمند ساخت تیتر اصلی — با فیلتر محافظتی عدم تطابق نمادها."""
+  """موتور قفل‌شده و ۱۰۰٪ سخت‌گیرانه برای ساخت تیتر اصلی فردا."""
   if not analyzed_data:
     return ""
 
   valid_candidates = []
 
+  # 🛑 فیلتر الماس ۱۰۰٪ سخت‌گیرانه: فقط فشار >= 80 و قدرت خریدار >= 1.3
   for item in analyzed_data:
     opt_class = item.get("option_class", "")
     opt_price = item.get("opt_real_price", 0)
     opt_vol = item.get("opt_real_volume", 0)
     opt_symbol = normalize_fa(item.get("opt_real_symbol", ""))
     stock_symbol = normalize_fa(item.get("symbol", ""))
+    pressure = item.get("pressure_score", 0)
+    power = item.get("buyer_power", 0)
     is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
 
-    # 🛑 فیلتر محافظتی ۲: حتماً نماد اختیار با نماد پایه مطابقت داشته باشد! (جلوگیری از پیشنهاد طخود برای دارونو!)
+    # چک تطبیق دقیق نماد پایه با نماد آپشن
     prefix_info = OPTION_PREFIX_MAP.get(stock_symbol)
     if prefix_info:
       expected_pfx = (
@@ -1111,56 +1111,25 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
           else prefix_info[1]
       )
       keywords = prefix_info[2]
-      # چک تطبیق پیشوند یا کلمه کلیدی
       is_correct_match = opt_symbol.startswith(expected_pfx) or any(
           kw in opt_symbol for kw in keywords
       )
       if not is_correct_match:
         continue
 
-    has_good_liquidity = (
-        opt_price >= 50 and opt_vol > 0 and "یافت نشد" not in opt_symbol
+    # 💎 الزامات مطلق سیگنال الماس فردا
+    is_diamond_call = (
+        opt_class == "opt-call-strong" and pressure >= 80 and power >= 1.30
+    )
+    is_diamond_put = (
+        opt_class == "opt-put-strong" and pressure <= 25 and power <= 0.75
     )
 
-    if opt_class in ("opt-call-strong", "opt-put-strong"):
-      if has_good_liquidity and not is_iv_crush:
+    if (is_diamond_call or is_diamond_put) and not is_iv_crush:
+      if opt_price >= 50 and opt_vol > 0 and "یافت نشد" not in opt_symbol:
         valid_candidates.append(item)
 
-  if not valid_candidates:
-    for item in analyzed_data:
-      opt_class = item.get("option_class", "")
-      opt_price = item.get("opt_real_price", 0)
-      opt_vol = item.get("opt_real_volume", 0)
-      opt_symbol = normalize_fa(item.get("opt_real_symbol", ""))
-      stock_symbol = normalize_fa(item.get("symbol", ""))
-      is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
-
-      prefix_info = OPTION_PREFIX_MAP.get(stock_symbol)
-      if prefix_info:
-        expected_pfx = (
-            prefix_info[0]
-            if "CALL" in item.get("option_label", "")
-            else prefix_info[1]
-        )
-        keywords = prefix_info[2]
-        if not (
-            opt_symbol.startswith(expected_pfx)
-            or any(kw in opt_symbol for kw in keywords)
-        ):
-          continue
-
-      has_good_liquidity = (
-          opt_price >= 50 and opt_vol > 0 and "یافت نشد" not in opt_symbol
-      )
-
-      if (
-          opt_class in ("opt-call-soft", "opt-put-soft")
-          and item.get("pressure_score", 0) >= 75
-          and has_good_liquidity
-          and not is_iv_crush
-      ):
-        valid_candidates.append(item)
-
+  # 🛑 اگر حتی یک نماد هم تمام الزامات بالا را ۱۰۰٪ پاس نکرد 👈 NO TRADE مطلق
   if not valid_candidates:
     return """
         <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid #ef4444; border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.25);">
@@ -1169,7 +1138,7 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
                 <h2 style="margin: 0; color: #f87171; font-size: 20px; font-weight: 800;">دستورالعمل معامله فردا: هیچ معامله‌ای انجام ندهید! (NO TRADE)</h2>
             </div>
             <p style="margin: 0; color: #cbd5e1; font-size: 13.5px; line-height: 1.7;">
-                بررسی تمام الزامات سیستم نشان می‌دهد بازار فردا دارای سیگنال هم‌جهت با نقدشوندگی عالی و حباب منصفانه نیست. برای حفظ سرمایه، پیشنهاد می‌شود فردا <strong>دست نگه دارید</strong> و هیچ موقعیت جدیدی در اختیار معامله اتخاذ نکنید.
+                بررسی سخت‌گیرانه تمام الزامات نشان می‌دهد بازار فردا فاقد سیگنال الماس با قدرت خریدار عالی و حباب منصفانه است. برای حفظ سرمایه، فردا <strong>کاملاً دست نگه دارید</strong> و هیچ معامله جدیدی انجام ندهید.
             </p>
         </div>
         """

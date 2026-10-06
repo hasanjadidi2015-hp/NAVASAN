@@ -269,3 +269,16 @@
 2026-10-05 11:58:04 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
 2026-10-05 12:18:05 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
 2026-10-05 12:38:05 | END | ساعت پایان رسید - جمع‌آوری متوقف شد
+2026-10-06 09:03:03 | START | شروع جمع‌آوری - بازه 08:55 تا 12:30
+2026-10-06 09:03:04 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 09:23:05 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 09:43:06 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 10:03:07 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 10:23:07 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 10:43:08 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 11:03:09 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 11:23:13 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 11:43:15 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 12:03:22 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 12:23:23 | FAILED | خطا در دریافت داده (احتمال قطعی برق/اینترنت): too many values to unpack (expected 2)
+2026-10-06 12:53:53 | END | ساعت پایان رسید - جمع‌آوری متوقف شد
