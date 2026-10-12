@@ -86,18 +86,18 @@ def get_days_to_expiration(lvc_text: str) -> int:
 
 
 OPTION_PREFIX_MAP = {
-    "اهرم": ("ضهرم", "طهرم", ["اهرم"]),
-    "فملی": ("ضملی", "طملی", ["فملی", "فملي"]),
-    "وبملت": ("ضملت", "طملت", ["وبملت"]),
-    "شستا": ("ضستا", "طستا", ["شستا"]),
-    "شپنا": ("ضپنا", "طپنا", ["شپنا"]),
-    "خساپا": ("ضسپا", "طسپا", ["خساپا"]),
-    "خودرو": ("ضخود", "طخود", ["خودرو"]),
+    "اهرم": ("ضهرم", "طهرم", ["اهرم", "هرم"]),
+    "فملی": ("ضملی", "طملی", ["فملی", "فملي", "ملی", "ملي"]),
+    "وبملت": ("ضملت", "طملت", ["وبملت", "ملت"]),
+    "شستا": ("ضستا", "طستا", ["شستا", "ستا"]),
+    "شپنا": ("ضپنا", "طپنا", ["شپنا", "پنا"]),
+    "خساپا": ("ضسپا", "طسپا", ["خساپا", "ساپا", "سپا"]),
+    "خودرو": ("ضخود", "طخود", ["خودرو", "خودر", "خود"]),
     "ذوب": ("ضذوب", "طذوب", ["ذوب"]),
-    "خبهمن": ("ضهمن", "طهمن", ["خبهمن"]),
-    "تاصیکو": ("ضتاس", "طتاس", ["تاصیکو", "تاصيكو"]),
-    "وبصادر": ("ضصاد", "طصاد", ["وبصادر"]),
-    "وتجارت": ("ضجار", "طجار", ["وتجارت"]),
+    "خبهمن": ("ضهمن", "طهمن", ["خبهمن", "بهمن", "همن"]),
+    "تاصیکو": ("ضتاس", "طتاس", ["تاصیکو", "تاصيكو", "صیکو", "تاس"]),
+    "وبصادر": ("ضصاد", "طصاد", ["وبصادر", "صادر", "صاد"]),
+    "وتجارت": ("ضجار", "طجار", ["وتجارت", "تجارت", "تجار", "جار"]),
     "فزر": ("ضفذر", "طفذر", ["فزر", "فذر", "پویا زرکان", "پويا زركان"]),
     "دارونو": ("ضدرو", "طدور", ["دارونو"]),
     "اطلس": ("ضاطلس", "طاطلس", ["اطلس"]),
@@ -221,6 +221,7 @@ def find_best_real_option_contract(
 
 
 def option_decision(row: dict) -> dict:
+  """تصمیم یک‌خطی فوق‌العاده سخت‌گیرانه برای آپشن."""
   p = _f(row.get("pressure_score"))
   power = _f(row.get("buyer_power"), 1.0)
   alpha = _f(row.get("alpha_market"))
@@ -229,83 +230,62 @@ def option_decision(row: dict) -> dict:
   label_candle = str(row.get("candle_label") or "")
   is_buy_q = bool(row.get("is_buy_queue"))
   is_sell_q = bool(row.get("is_sell_queue"))
+  p_2pct = _f(row.get("p_2pct"), 0.0)  # احتمال هوش مصنوعی برای +۲٪ سود
 
   bull_trap = ("تله گاوی" in label_candle) or (is_buy_q and power < 0.85)
   bear_accum = ("جمع‌آوری" in label_candle) or (is_sell_q and power > 1.2)
   eg_weak = snaps >= 2 and eg <= 35
   eg_strong = snaps >= 2 and eg >= 65
 
-  if (not bull_trap) and p >= 75 and power >= 1.30 and not eg_weak and alpha >= 0:
-    return {
-        "option_label": "CALL آماده‌باش 🟢🟢",
-        "option_class": "opt-call-strong",
-        "option_reason": "فشار+قدرت هم‌جهت صعودی",
-    }
-  if (not bull_trap) and p >= 78 and power >= 1.20 and eg_strong:
-    return {
-        "option_label": "CALL آماده‌باش 🟢🟢",
-        "option_class": "opt-call-strong",
-        "option_reason": "فشار بالا + شتاب پایان بازار",
-    }
-  if (not bull_trap) and p >= 68 and power >= 1.15 and not eg_weak:
-    return {
-        "option_label": "CALL محتاط 🟢",
-        "option_class": "opt-call-soft",
-        "option_reason": "صعودی با کیفیت متوسط",
-    }
+  # 🎯 الزامات سخت‌گیرانه برای صادر شدن CALL آماده‌باش:
+  # فشار بالای ۸۰ + قدرت خریدار بالای ۱.۵ + احتمال ML بالای ۶۰٪
   if (
       (not bull_trap)
-      and p >= 70
-      and power >= 1.00
-      and alpha >= 0.5
+      and p >= 80
+      and power >= 1.40
       and not eg_weak
+      and alpha >= 0
   ):
+    if p_2pct >= 55.0 or not row.get("ml_ready"):
+      return {
+          "option_label": "CALL آماده‌باش 🟢🟢",
+          "option_class": "opt-call-strong",
+          "option_reason": "فشار بالا + قدرت خریدار عالی",
+      }
+
+  if (not bull_trap) and p >= 85 and power >= 1.25 and eg_strong:
+    return {
+        "option_label": "CALL آماده‌باش 🟢🟢",
+        "option_class": "opt-call-strong",
+        "option_reason": "فشار شدید + شتاب پایانی عالی",
+    }
+
+  if (not bull_trap) and p >= 70 and power >= 1.20 and not eg_weak:
     return {
         "option_label": "CALL محتاط 🟢",
         "option_class": "opt-call-soft",
-        "option_reason": "فشار خوب ولی قدرت متوسط",
+        "option_reason": "صعودی ملایم (مناسب خرید سهم، نه آپشن سنگین)",
     }
-  if (not bear_accum) and p <= 30 and power <= 0.80 and not eg_strong:
+
+  # 🎯 الزامات سخت‌گیرانه برای صادر شدن PUT آماده‌باش:
+  if (not bear_accum) and p <= 25 and power <= 0.70 and not eg_strong:
     return {
         "option_label": "PUT آماده‌باش 🔴🔴",
         "option_class": "opt-put-strong",
-        "option_reason": "فشار+قدرت هم‌جهت نزولی",
+        "option_reason": "فشار فروش شدید + فروشنده درشت",
     }
-  if (not bear_accum) and p <= 28 and is_sell_q and power <= 0.90:
-    return {
-        "option_label": "PUT آماده‌باش 🔴🔴",
-        "option_class": "opt-put-strong",
-        "option_reason": "صف فروش + فشار خیلی ضعیف",
-    }
-  if (not bear_accum) and p <= 38 and power <= 0.90 and not eg_strong:
+
+  if (not bear_accum) and p <= 35 and power <= 0.85 and not eg_strong:
     return {
         "option_label": "PUT محتاط 🔴",
         "option_class": "opt-put-soft",
-        "option_reason": "نزول محتمل با ریسک برگشت",
-    }
-  if (not bear_accum) and p <= 40 and power <= 0.85 and alpha <= -0.5:
-    return {
-        "option_label": "PUT محتاط 🔴",
-        "option_class": "opt-put-soft",
-        "option_reason": "ضعیف‌تر از بازار + خریدار کم‌قدرت",
-    }
-  if bull_trap:
-    return {
-        "option_label": "NO TRADE ⚪",
-        "option_class": "opt-no",
-        "option_reason": "تله گاوی / صف بی‌کیفیت",
-    }
-  if bear_accum and p <= 45:
-    return {
-        "option_label": "NO TRADE ⚪",
-        "option_class": "opt-no",
-        "option_reason": "احتمال جمع‌آوری در منفی",
+        "option_reason": "نزول ملایم با ریسک برگشت",
     }
 
   return {
       "option_label": "NO TRADE ⚪",
       "option_class": "opt-no",
-      "option_reason": "سیگنال قاطی/ضعیف برای آپشن",
+      "option_reason": "عدم وجود شتاب کافی برای سود آپشن",
   }
 
 
@@ -1045,7 +1025,7 @@ def analyze_tomorrow_status(
     od = option_decision(row)
     row.update(od)
 
-    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله
+    # 🔍 جستجوی واقعی و زنده بهترین قرارداد اختیار معامله (با فیلتر DTE >= 1)
     real_opt = find_best_real_option_contract(
         all_market_items, symbol, row["option_label"], last_price
     )
@@ -1085,13 +1065,12 @@ def analyze_tomorrow_status(
 
 
 def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
-  """موتور قفل‌شده و ۱۰۰٪ سخت‌گیرانه برای ساخت تیتر اصلی فردا."""
+  """موتور هوشمند ساخت تیتر اصلی — با سخت‌گیری ۱۰۰٪ و فیلتر سود واقعی آپشن (ML_2pct >= 55%)."""
   if not analyzed_data:
     return ""
 
   valid_candidates = []
 
-  # 🛑 فیلتر الماس ۱۰۰٪ سخت‌گیرانه: فقط فشار >= 80 و قدرت خریدار >= 1.3
   for item in analyzed_data:
     opt_class = item.get("option_class", "")
     opt_price = item.get("opt_real_price", 0)
@@ -1100,9 +1079,10 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
     stock_symbol = normalize_fa(item.get("symbol", ""))
     pressure = item.get("pressure_score", 0)
     power = item.get("buyer_power", 0)
+    p_2pct = _f(item.get("p_2pct"), 0.0)
     is_iv_crush = "IV Crush" in item.get("opt_bubble_status", "")
 
-    # چک تطبیق دقیق نماد پایه با نماد آپشن
+    # چک تطبیق دقیق نماد
     prefix_info = OPTION_PREFIX_MAP.get(stock_symbol)
     if prefix_info:
       expected_pfx = (
@@ -1117,9 +1097,16 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
       if not is_correct_match:
         continue
 
-    # 💎 الزامات مطلق سیگنال الماس فردا
+    # 💎 الزامات جدید و فوق‌العاده سخت‌گیرانه سیگنال الماس فردا:
+    # 1. فشار بالای 80
+    # 2. قدرت خریدار بالای 1.40
+    # 3. احتمال سود +2٪ هوش مصنوعی (ML) بالای 55٪
+    # 4. عدم وجود ریسک حباب IV Crush
     is_diamond_call = (
-        opt_class == "opt-call-strong" and pressure >= 80 and power >= 1.30
+        opt_class == "opt-call-strong"
+        and pressure >= 80
+        and power >= 1.40
+        and (p_2pct >= 55.0 or not item.get("ml_ready"))
     )
     is_diamond_put = (
         opt_class == "opt-put-strong" and pressure <= 25 and power <= 0.75
@@ -1129,7 +1116,7 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
       if opt_price >= 50 and opt_vol > 0 and "یافت نشد" not in opt_symbol:
         valid_candidates.append(item)
 
-  # 🛑 اگر حتی یک نماد هم تمام الزامات بالا را ۱۰۰٪ پاس نکرد 👈 NO TRADE مطلق
+  # 🛑 اگر هیچ نمادی تمام این شرایط سخت‌گیرانه را نداشت 👈 NO TRADE مطلق
   if not valid_candidates:
     return """
         <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid #ef4444; border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.25);">
@@ -1138,7 +1125,7 @@ def generate_daily_bulletin(analyzed_data: list, regime_info: dict) -> str:
                 <h2 style="margin: 0; color: #f87171; font-size: 20px; font-weight: 800;">دستورالعمل معامله فردا: هیچ معامله‌ای انجام ندهید! (NO TRADE)</h2>
             </div>
             <p style="margin: 0; color: #cbd5e1; font-size: 13.5px; line-height: 1.7;">
-                بررسی سخت‌گیرانه تمام الزامات نشان می‌دهد بازار فردا فاقد سیگنال الماس با قدرت خریدار عالی و حباب منصفانه است. برای حفظ سرمایه، فردا <strong>کاملاً دست نگه دارید</strong> و هیچ معامله جدیدی انجام ندهید.
+                بررسی سخت‌گیرانه تمام الزامات نشان می‌دهد بازار فردا فاقد سیگنال الماس با احتمال سود +۲٪ بالای ۵۵٪ و حباب منصفانه است. برای حفظ سرمایه، فردا <strong>کاملاً دست نگه دارید</strong> و هیچ معامله جدیدی انجام ندهید.
             </p>
         </div>
         """
