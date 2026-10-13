@@ -79,7 +79,13 @@ def print_log_summary():
     rows = cur.fetchall()
     print("\n📋 خلاصه‌ی لاگ اسنپ‌شات‌ها بر اساس روز:")
     for d, status, cnt in rows:
-        mark = "✅" if status == "OK" else ("⚠️" if status == "FAILED" else "🔥" if status == "CRASH" else "ℹ️")
+        mark = (
+            "✅" if status == "OK"
+            else "⚠️" if status == "FAILED"
+            else "🐞" if status == "CODE_ERROR"
+            else "🔥" if status == "CRASH"
+            else "ℹ️"
+        )
         print(f"  {mark} {d} | {status:8s} | {cnt} بار")
 
     # تشخیص شکاف زمانی: اگه بین دو تلاش پیاپی (هر نوعی) بیش از ۲ برابر
@@ -260,25 +266,35 @@ def save_snapshot(rows: list):
     print(f"📸 اسنپ‌شات {time_str} — {saved} نماد ذخیره شد.")
 
 
-def run_once():
+def run_once() -> bool:
+    """یک اسنپ‌شات می‌گیرد. True یعنی موفق، False یعنی شکست."""
     try:
-        raw, _regime = fetch_enriched_target_data(max_workers=6)
+        result = fetch_enriched_target_data(max_workers=6)
+        # collector.py الان ۳ مقدار برمی‌گردونه (enriched, regime, all_items) و قبلاً ۲ تا؛
+        # ما فقط اولی (raw) رو لازم داریم، پس با هر تعداد مقدار کار می‌کنه.
+        raw = result[0] if isinstance(result, (tuple, list)) and result else result
     except Exception as e:
-        log_event("FAILED", f"خطا در دریافت داده (احتمال قطعی برق/اینترنت): {e}")
-        return
+        kind = type(e).__name__
+        if isinstance(e, (ValueError, TypeError, KeyError, AttributeError, IndexError)):
+            # این نوع خطا تقریباً همیشه باگ کده، نه قطعی برق/اینترنت
+            log_event("CODE_ERROR", f"{kind}: {e} - باگ کد (نه قطعی شبکه)، باید اصلاح بشه")
+        else:
+            log_event("FAILED", f"{kind}: {e} - احتمال مشکل شبکه/سرور")
+        return False
 
     if not raw:
         log_event("FAILED", "دیتا خالی برگشت (raw خالی) - احتمال قطعی برق/اینترنت یا خرابی سرور")
-        return
+        return False
 
     rows = [extract_snapshot_row(item) for item in raw]
     rows = [r for r in rows if r]
     if not rows:
         log_event("FAILED", "هیچ ردیف معتبری بعد از پردازش استخراج نشد")
-        return
+        return False
 
     save_snapshot(rows)
     log_event("OK", f"{len(rows)} نماد ذخیره شد")
+    return True
 
 
 def run_loop(interval_minutes: int = 20, start: str = "08:55", end: str = "12:30"):
@@ -288,6 +304,7 @@ def run_loop(interval_minutes: int = 20, start: str = "08:55", end: str = "12:30
     """
     print(f"🚀 جمع‌آوری اسنپ‌شات هر {interval_minutes} دقیقه، بین ساعت {start} تا {end}")
     log_event("START", f"شروع جمع‌آوری - بازه {start} تا {end}")
+    fail_streak = 0
     while True:
         now = datetime.datetime.now().strftime("%H:%M")
         if now < start:
@@ -298,11 +315,19 @@ def run_loop(interval_minutes: int = 20, start: str = "08:55", end: str = "12:30
             print("⏹ ساعت پایان رسید، جمع‌آوری متوقف شد.")
             break
         try:
-            run_once()
+            ok = run_once()
         except Exception as e:
             # حتی اگه run_once به هر دلیل غیرمنتظره‌ای کرش کنه (مثلاً قطع شدن
             # ناگهانی اتصال وسط پردازش)، حلقه نباید کلاً متوقف بشه.
             log_event("CRASH", f"خطای غیرمنتظره در run_once: {e}")
+            ok = False
+        fail_streak = 0 if ok else fail_streak + 1
+        if fail_streak == 3:
+            # تا همین روز دیده بشه، نه بعد از ۸ روز (۲۰۲۶-۱۰-۰۳ تا ۱۰-۱۲ بی‌صدا شکست خورد)
+            print("\n" + "🚨" * 20)
+            print("🚨 ۳ اسنپ‌شات پشت‌سرهم شکست خورد! آخرین خطا رو توی snapshot_log.txt ببین.")
+            print("🚨 تا درست نشه، Endgame Score همه‌ی سیگنال‌های امروز ثابت ۵۰ می‌مونه.")
+            print("🚨" * 20 + "\n")
         time.sleep(interval_minutes * 60)
 
 
