@@ -61,7 +61,7 @@ def _f(v, d=0.0):
 def capture_once() -> int:
     """یک اسنپ‌شات از همه نمادهای هدف."""
     init_snapshot_db()
-    raw, _regime = fetch_enriched_target_data(max_workers=6)
+    raw = fetch_enriched_target_data(max_workers=6)[0]
     if not raw:
         print("❌ اسنپ‌شات خالی — دیتا نیامد")
         return 0
